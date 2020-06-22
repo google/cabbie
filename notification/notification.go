@@ -26,6 +26,11 @@ func NewRebootMessage(seconds int) string {
 	return fmt.Sprintf("Reboot now to finish installing updates. Your machine will auto reboot at %s", t)
 }
 
+// RebootPopup returns a reboot warning popup message.
+func RebootPopup(minutes int) string {
+	return fmt.Sprintf("To finish installing the newest updates, your machine will auto reboot in %d minutes", minutes)
+}
+
 // NewAvailableUpdateMessage returns an available updates message.
 func NewAvailableUpdateMessage() string {
 	return "New Windows updates are now available. Please install at your earliest convenience"
