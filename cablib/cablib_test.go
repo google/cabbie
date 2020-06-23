@@ -197,7 +197,7 @@ func TestStringInSlice(t *testing.T) {
 	} {
 		o := StringInSlice(tt.st, tt.sl)
 		if o != tt.out {
-			t.Errorf("got %q, want %q", o, tt.out)
+			t.Errorf("got %t, want %t", o, tt.out)
 		}
 	}
 }
@@ -240,7 +240,7 @@ func TestSliceContains(t *testing.T) {
 	} {
 		o := SliceContains(tt.sl, tt.st)
 		if o != tt.out {
-			t.Errorf("got %q, want %q", o, tt.out)
+			t.Errorf("got %t, want %t", o, tt.out)
 		}
 	}
 }
