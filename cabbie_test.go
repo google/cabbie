@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	testPath = `Bar\Foo\Cabbie\`
+	testPath = `SOFTWARE\Bar`
 )
 
 type testCabbieLog struct {
@@ -42,7 +42,7 @@ func (f *testCabbieLog) Close() error {
 }
 
 func createTestKeys() error {
-	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, testPath, registry.CREATE_SUB_KEY)
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, testPath, registry.ALL_ACCESS)
 	if err != nil {
 		return err
 	}
