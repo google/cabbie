@@ -36,7 +36,7 @@ var (
 )
 
 func createTestKeys() error {
-	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, testPath, registry.CREATE_SUB_KEY)
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, testPath, registry.CREATE_SUB_KEY)
 	if err != nil {
 		return err
 	}
@@ -44,11 +44,11 @@ func createTestKeys() error {
 }
 
 func cleanupTestKey() error {
-	return registry.DeleteKey(registry.LOCAL_MACHINE, testPath)
+	return registry.DeleteKey(registry.CURRENT_USER, testPath)
 }
 
 func getBinarykey(v string) ([]byte, error) {
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, testPath, registry.QUERY_VALUE)
+	k, err := registry.OpenKey(registry.CURRENT_USER, testPath, registry.QUERY_VALUE)
 	if err != nil {
 		return nil, err
 	}
