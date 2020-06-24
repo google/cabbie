@@ -25,19 +25,19 @@ const (
 	testPath = `Bar\Foo\Cabbie\`
 )
 
-type testLog struct {
+type testCabbieLog struct {
 }
 
-func (f *testLog) Info(id uint32, msg string) error {
+func (f *testCabbieLog) Info(id uint32, msg string) error {
 	return nil
 }
-func (f *testLog) Error(id uint32, msg string) error {
+func (f *testCabbieLog) Error(id uint32, msg string) error {
 	return nil
 }
-func (f *testLog) Warning(id uint32, msg string) error {
+func (f *testCabbieLog) Warning(id uint32, msg string) error {
 	return nil
 }
-func (f *testLog) Close() error {
+func (f *testCabbieLog) Close() error {
 	return nil
 }
 
@@ -55,7 +55,7 @@ func cleanupTestKey() error {
 
 func TestRegLoadKeyMissing(t *testing.T) {
 	// Setup
-	elog = new(testLog)
+	elog = new(testCabbieLog)
 	expected := newSettings()
 	testconfig := newSettings()
 	// End Setup
@@ -68,14 +68,15 @@ func TestRegLoadKeyMissing(t *testing.T) {
 }
 
 func TestRegLoadKeyEmpty(t *testing.T) {
-	elog = new(testLog)
+	// Setup
+	elog = new(testCabbieLog)
 	if err := createTestKeys(); err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	defer cleanupTestKey()
 	expected := newSettings()
 	testconfig := newSettings()
-
+	// End Setup
 	if err := testconfig.regLoad(testPath); err != nil {
 		t.Error(err)
 	}
@@ -100,7 +101,7 @@ func TestRegLoadRequiredCategories(t *testing.T) {
 	k.Close()
 	defer cleanupTestKey()
 
-	elog = new(testLog)
+	elog = new(testCabbieLog)
 	expected := newSettings()
 	expected.RequiredCategories = rc
 	testconfig := newSettings()

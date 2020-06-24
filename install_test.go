@@ -21,20 +21,19 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-type testLog struct {
-	Handle int
+type testInstallLog struct {
 }
 
-func (f *testLog) Info(id uint32, msg string) error {
+func (f *testInstallLog) Info(id uint32, msg string) error {
 	return nil
 }
-func (f *testLog) Error(id uint32, msg string) error {
+func (f *testInstallLog) Error(id uint32, msg string) error {
 	return nil
 }
-func (f *testLog) Warning(id uint32, msg string) error {
+func (f *testInstallLog) Warning(id uint32, msg string) error {
 	return nil
 }
-func (f *testLog) Close() error {
+func (f *testInstallLog) Close() error {
 	return nil
 }
 
@@ -53,7 +52,7 @@ func TestGetCriteria(t *testing.T) {
 		{installCmd{kbs: "KB1234567"}, string(search.BasicSearch), nil},
 		{installCmd{}, string(search.BasicSearch), categoryDefaults},
 	} {
-		elog = new(testLog)
+		elog = new(testInstallLog)
 		config = newFakeConfig()
 		oc, orc := tt.i.criteria()
 		if !(strings.Contains(oc, tt.outcriteria)) {
