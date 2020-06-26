@@ -12,7 +12,7 @@ Similarly, `cabbie flags` will show available flags.
 
 ## Getting Started
 
-Download the repository and run `go build C:\Path\to\cabbie`
+Download the repository and run `go build C:\Path\to\cabbie\src`
 
 Install any missing imports with `go get <URL>`
 
@@ -56,8 +56,7 @@ These options can be configured using the registry key at
 
 
 
-
-## Usage
+## Command-line Usage
 
 `cabbie.exe <flags> <subcommand> <subcommand args>`
 
@@ -124,6 +123,41 @@ Install Cabbie service:
 Uninstall Cabbie service:
 
 `cabbie service --uninstall`
+
+## Service Usage
+
+Cabbie can also run as a Windows Service to enable constant update and reboot management.
+
+The basic steps to install the Cabbie service:
+
+1.   Compile the Cabbie binary using `go build C:\Path\to\cabbie\src`.
+2.   Copy the built `cabbie.exe` binary to the folder `C:\Program Files\Google\Cabbie`.
+3.   From that folder, run `.\cabbie.exe service --install`
+
+Cabbie service will now run as a service on that machine and check for updates using the configuration options above.
+
+### Using a Maintenance Window
+
+You can define a maintenance window for Cabbie to follow by installing and configuring the [aukera service](https://github.com/google/aukera). Once configured, update the Cabbie registry options to `AukeraEnabled= 1` and restart the Cabbie service.
+
+<details>
+  <summary>Example Aukera Config</summary>
+    ```json
+    {
+      "Windows": [
+        {
+          "Name": "Default Cabbie maintenance Window",
+          "Format": 1,
+          "Schedule": "0 40 10 * * THU",
+          "Duration": "6h",
+          "Starts": null,
+          "Expires": null,
+          "Labels": ["cabbie"]
+        }
+      ]
+    }
+    ```
+</details>
 
 ## Disclaimer
 
