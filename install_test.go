@@ -41,6 +41,31 @@ func newFakeConfig() *Settings {
 	return &Settings{RequiredCategories: categoryDefaults}
 }
 
+func TestName(t *testing.T) {
+	name := "install"
+	install := &installCmd{}
+	got := install.Name()
+	if got != name {
+		t.Errorf("Name() got: %q, want: %q", got, name)
+	}
+}
+
+func TestSynopsis(t *testing.T) {
+	install := &installCmd{}
+	got := install.Synopsis()
+	if got == "" {
+		t.Errorf("Synopsis() got: %q, want: not empty", got)
+	}
+}
+
+func TestUsage(t *testing.T) {
+	install := &installCmd{}
+	got := install.Usage()
+	if got == "" {
+		t.Errorf("Usage() got: %q, want: not empty", got)
+	}
+}
+
 func TestGetCriteria(t *testing.T) {
 	for _, tt := range []struct {
 		i              installCmd
