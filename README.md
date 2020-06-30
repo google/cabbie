@@ -21,39 +21,20 @@ Install any missing imports with `go get <URL>`
 These options can be configured using the registry key at
 `HKLM:\SOFTWARE\Google\Cabbie`
 
-| Setting           | Registry Type| Default Setting   | Description                                                                                              |
-|-------------------|--------------|-------------------|----------------------------------------------------------------------------------------------------------|
-| ------------------| -------------| ------------------| ------------------                                                                                       |
-| WSUSServers       |REG_MULTI_SZ  |nil                |List of WSUS servers to connect to instead of Microsoft updates.                                          |
-| RequiredCategories|REG_MULTI_SZ  |"Critical          |List of Update categories that an update must contain at least one of to be automatically installed.      |
-:                   :              : Updates",         :                                                                                                          :
-:                   :              : "Definition       :                                                                                                          :
-:                   :              : Updates",         :                                                                                                          :
-:                   :              : "Security Updates":                                                                                                          :
-| UpdateDrivers     |REG_DWORD     |0                  |Allow Cabbie to install available drivers.                                                                |
-:                   :              :                   :                                                                                                          :
-:                   :              :                   :0 = Disabled                                                                                              :
-:                   :              :                   :1 = Enabled                                                                                               :
-| UpdateVirusDef    |REG_DWORD     |1                  |Allow Cabbie to install updated virus definitions every 30 minutes.                                       |
-:                   :              :                   :                                                                                                          :
-:                   :              :                   :0 = Disabled                                                                                              :
-:                   :              :                   :1 = Enabled                                                                                               :
-| EnableThirdParty  |REG_DWORD     |0                  |Allow Cabbie to check for third party software updates such off MSFT Office and Adobe.                    |
-:                   :              :                   :                                                                                                          :
-:                   :              :                   :0 = Disabled                                                                                              :
-:                   :              :                   :1 = Enabled                                                                                               :
-| RebootDelay       |REG_DWORD     |21600              |Time in seconds for Cabbie to wait before force rebooting a machine to finalize update installation.      |
-| Deadline          |REG_DWORD     |14                 |Number of days before Cabbie will force install an available update that matches the required categories. |
-:                   :              :                   :                                                                                                          :
-:                   :              :                   :Set to "0" to disable this option.                                                                        :
-| AukeraEnabled     |REG_DWORD     |0                  |Enable Cabbie to use the open source Aukera maintenance window manager.                                   |
-:                   :              :                   :                                                                                                          :
-:                   :              :                   :0 = Disabled                                                                                              :
-:                   :              :                   :1 = Enabled                                                                                               :
-| AukeraPort        |REG_DWORD     |9119               |LocalHost port to check against for Aukera maintenance windows.                                           |
-| AukeraName         |REG_SZ        |"Cabbie"           |Aukera maintenance window label to query for to determine if a maintenance window is currently open.      |
-| NotifyAvailable    |REG_DWORD     |1                  |If enabled Cabbie will send a notification when new required updates are available to be installed.       |
-
+| Setting           | Registry Type| Default Setting                                            | Description                                                                                                                                |
+|-------------------|--------------|------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| ------------------| -------------| ------------------                                         | ------------------                                                                                                                         |
+| WSUSServers       |REG_MULTI_SZ  |nil                                                         |List of WSUS servers to connect to instead of Microsoft updates.                                                                            |
+| RequiredCategories|REG_MULTI_SZ  |"Critical Updates", "Definition Updates", "Security Updates"|List of Update categories that an update must contain at least one of to be automatically installed.                                        |
+| UpdateDrivers     |REG_DWORD     |0                                                           |Allow Cabbie to install available drivers.                                                                                                  |
+| UpdateVirusDef    |REG_DWORD     |1                                                           |Allow Cabbie to install updated virus definitions every 30 minutes.                                                                         |
+| EnableThirdParty  |REG_DWORD     |0                                                           |Allow Cabbie to check for third party software updates such off MSFT Office and Adobe.                                                      |
+| RebootDelay       |REG_DWORD     |21600                                                       |Time in seconds for Cabbie to wait before force rebooting a machine to finalize update installation.                                        |
+| Deadline          |REG_DWORD     |14                                                          |Number of days before Cabbie will force install an available update that matches the required categories. Set to "0" to disable this option.|
+| NotifyAvailable   |REG_DWORD     |1                                                           |If enabled Cabbie will send a notification when new required updates are available to be installed.                                         |
+| AukeraEnabled     |REG_DWORD     |0                                                           |Enable Cabbie to use the open source Aukera maintenance window manager.                                                                     |
+| AukeraPort        |REG_DWORD     |9119                                                        |LocalHost port to check against for Aukera maintenance windows.                                                                             |
+| AukeraName        |REG_SZ        |"Cabbie"                                                    |Aukera maintenance window label to query for to determine if a maintenance window is currently open.                                        |
 
 
 ## Command-line Usage
@@ -140,23 +121,22 @@ Cabbie service will now run as a service on that machine and check for updates u
 
 You can define a maintenance window for Cabbie to follow by installing and configuring the [aukera service](https://github.com/google/aukera). Once configured, update the Cabbie registry options to `AukeraEnabled= 1` and restart the Cabbie service.
 
-<details>
-  <summary>Example Aukera Config</summary>
-    ```json
+#### Example Aukera Config
+```json
+{
+  "Windows": [
     {
-      "Windows": [
-        {
-          "Name": "Default Cabbie maintenance Window",
-          "Format": 1,
-          "Schedule": "0 40 10 * * THU",
-          "Duration": "6h",
-          "Starts": null,
-          "Expires": null,
-          "Labels": ["cabbie"]
-        }
-      ]
+      "Name": "Default Cabbie maintenance Window",
+      "Format": 1,
+      "Schedule": "0 40 10 * * THU",
+      "Duration": "6h",
+      "Starts": null,
+      "Expires": null,
+      "Labels": ["cabbie"]
     }
-    ```
+  ]
+}
+```
 </details>
 
 ## Disclaimer
