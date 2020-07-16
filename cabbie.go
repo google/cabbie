@@ -42,7 +42,7 @@ var (
 	runInDebug       = flag.Bool("debug", false, "Run in debug mode")
 	config           = new(Settings)
 	categoryDefaults = []string{"Critical Updates", "Definition Updates", "Security Updates"}
-	rebootEvent      = make(chan bool, 1)
+	rebootEvent      = make(chan bool, 10)
 	rebootActive     = false
 
 	// Metrics
