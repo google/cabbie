@@ -107,6 +107,7 @@ const (
 	WU_E_WINHTTP_INVALID_FILE             UpdateError = 0x80240038
 	WU_E_DS_UNKNOWNSERVICE                UpdateError = 0x80248014
 	WU_E_PT_ECP_SUCCEEDED_WITH_ERRORS     UpdateError = 0x8024402F
+	WU_E_PT_EXCEEDED_MAX_SERVER_TRIPS     UpdateError = 0x80244010
 	WU_E_PT_HTTP_STATUS_BAD_REQUEST       UpdateError = 0x80244016
 	WU_E_PT_HTTP_STATUS_DENIED            UpdateError = 0x80244017
 	WU_E_PT_HTTP_STATUS_FORBIDDEN         UpdateError = 0x80244018
@@ -298,6 +299,8 @@ func (ue UpdateError) ErrorDesc() string {
 		return `Attempt to register an unknown service.`
 	case WU_E_PT_ECP_SUCCEEDED_WITH_ERRORS:
 		return `External cab file processing completed with some errors`
+	case WU_E_PT_EXCEEDED_MAX_SERVER_TRIPS:
+		return `The number of round trips to the server exceeded the maximum limit.`
 	case WU_E_PT_HTTP_STATUS_BAD_REQUEST:
 		return `Same as HTTP status 400 – The server could not process the request due to invalid syntax.`
 	case WU_E_PT_HTTP_STATUS_DENIED:
@@ -512,6 +515,8 @@ func (ue UpdateError) ErrorName() string {
 		return `WU_E_DS_UNKNOWNSERVICE`
 	case WU_E_PT_ECP_SUCCEEDED_WITH_ERRORS:
 		return `WU_E_PT_ECP_SUCCEEDED_WITH_ERRORS`
+	case WU_E_PT_EXCEEDED_MAX_SERVER_TRIPS:
+		return `WU_E_PT_EXCEEDED_MAX_SERVER_TRIPS`
 	case WU_E_PT_HTTP_STATUS_BAD_REQUEST:
 		return `WU_E_PT_HTTP_STATUS_BAD_REQUEST`
 	case WU_E_PT_HTTP_STATUS_DENIED:
