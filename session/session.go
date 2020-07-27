@@ -44,10 +44,6 @@ const (
 // New creates an update session object.
 func New() (*UpdateSession, error) {
 
-	if err := cablib.InitializeCOM(); err != nil {
-		return nil, err
-	}
-
 	session, err := cablib.NewCOMObject("Microsoft.Update.Session")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new COM object: %v", err)
@@ -69,5 +65,4 @@ func (u *UpdateSession) CreateInterface(ui updateInterface) (*ole.IDispatch, err
 // Close turns down any open update sessions.
 func (u *UpdateSession) Close() {
 	u.Session.Release()
-	ole.CoUninitialize()
 }

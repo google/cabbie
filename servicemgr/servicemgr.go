@@ -53,9 +53,6 @@ const (
 
 // InitMgrService creates an update service manager object.
 func InitMgrService() (*ServiceManager, error) {
-	if err := cablib.InitializeCOM(); err != nil {
-		return nil, err
-	}
 	mgr, err := cablib.NewCOMObject("Microsoft.Update.ServiceManager")
 	if err != nil {
 		return nil, err
@@ -106,5 +103,4 @@ func (m *ServiceManager) RemoveService(s ServiceID) error {
 // Close turns down any open service manager sessions.
 func (m *ServiceManager) Close() {
 	m.ServiceManager.Release()
-	ole.CoUninitialize()
 }

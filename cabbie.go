@@ -34,6 +34,7 @@ import (
 	"golang.org/x/sys/windows/svc/debug"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc"
+	"github.com/go-ole/go-ole"
 	"github.com/google/subcommands"
 )
 
@@ -497,7 +498,7 @@ func main() {
 
 	isIntSess, err := svc.IsAnInteractiveSession()
 	if err != nil {
-		elog.Error(1, fmt.Sprintf("Failed to determine if we are running in an interactive session: %v", err))
+		elog.Error(6, fmt.Sprintf("Failed to determine if we are running in an interactive session: %v", err))
 		os.Exit(2)
 	}
 
@@ -505,6 +506,12 @@ func main() {
 	if err := initMetrics(); err != nil {
 		elog.Error(6, err.Error())
 	}
+
+	if err := cablib.InitializeCOM(); err != nil {
+		elog.Error(6, err.Error())
+		os.Exit(1)
+	}
+	defer ole.CoUninitialize()
 
 	// Running as Service.
 	// TODO: move service logic into its own subcommand.
