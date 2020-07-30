@@ -142,13 +142,29 @@ func RebootTime() (time.Time, error) {
 	return t, nil
 }
 
+func cleanRebootValue() error {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer k.Close()
+
+	return k.DeleteValue(rebootValue)
+}
+
 // SystemReboot initates a restart when the set reboot time has passed. This should be called within a goroutine
 func SystemReboot(t time.Time) error {
 	time.Sleep(time.Until(t))
 
-	notification.RebootPopup(2)
+	if err := notification.NewNotification(SvcName, notification.RebootPopup(2), "rebootPending"); err != nil {
+		return fmt.Errorf("failed to create system reboot notification:%v", err)
+	}
+
 	time.Sleep(2 * time.Minute)
 
+	if err := cleanRebootValue(); err != nil {
+		return fmt.Errorf("failed to clean up registry value %q: %v", rebootValue, err)
+	}
 	return reboot.Now()
 }
 
