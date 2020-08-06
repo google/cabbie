@@ -79,7 +79,7 @@ func (c serviceCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 }
 
 func installService(name, desc string) error {
-	exepath, err := filepath.Abs(cablib.ExePath)
+	exepath, err := filepath.Abs(cablib.CabbiePath + cablib.CabbieExe)
 	if err != nil {
 		return err
 	}

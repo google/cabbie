@@ -168,6 +168,7 @@ func installCollection(s *session.UpdateSession, c *updatecollection.Collection)
 
 func (i *installCmd) installUpdates() error {
 	var rebootRequired bool
+
 	// Check for reboot status when not installing virus definitions.
 	if !(i.virusDef) {
 		rebootRequired, err := cablib.RebootRequired()
@@ -224,6 +225,7 @@ func (i *installCmd) installUpdates() error {
 	elog.Info(4, fmt.Sprintf("Updates Found:\n%s", strings.Join(uc.Titles(), "\n\n")))
 
 	installMsgPopped := i.virusDef
+	installingMinOneUpdate := false
 
 	kbs := NewKBSet(i.kbs)
 	for _, u := range uc.Updates {
@@ -274,6 +276,16 @@ func (i *installCmd) installUpdates() error {
 		if !installMsgPopped && !u.InCategories([]string{"Definition Updates"}) {
 			installingMessage()
 			installMsgPopped = true
+
+			exist, err := cablib.PathExists(filepath.Join(cablib.CabbiePath, "PreUpdate.ps1"))
+			if err != nil {
+				elog.Error(207, fmt.Sprintf("PreUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PreUpdate.ps1", err))
+			} else if exist {
+				if err := cablib.RunScript("PreUpdate.ps1"); err != nil {
+					elog.Error(208, fmt.Sprintf("PreUpdateScript: error running script:\n%v", err))
+				}
+			}
+			installingMinOneUpdate = true
 		}
 		elog.Info(002, fmt.Sprintf("Downloading Update:\n%v", u))
 
@@ -319,6 +331,14 @@ func (i *installCmd) installUpdates() error {
 		c.Close()
 	}
 
+	if installingMinOneUpdate {
+		exist, err := cablib.PathExists(filepath.Join(cablib.CabbiePath, "PostUpdate.ps1"))
+		if err != nil {
+			elog.Error(307, fmt.Sprintf("PostUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PreUpdate.ps1", err))
+		} else if exist {
+			cablib.RunScript("PostUpdate.ps1")
+		}
+	}
 	if rebootRequired {
 		rebootMessage(int(config.RebootDelay))
 		if err := cablib.SetRebootTime(config.RebootDelay); err != nil {

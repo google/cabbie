@@ -18,6 +18,8 @@ package cablib
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -38,8 +40,10 @@ const (
 	LogSrcName = "Cabbie"
 	// SvcName is the name of the registered Service.
 	SvcName = "Cabbie"
-	// ExePath is the windows path to the cabbie executable.
-	ExePath = `C:\Program Files\Google\Cabbie\cabbie.exe`
+	// CabbieExe is the windows path to the cabbie executable.
+	CabbieExe = `cabbie.exe`
+	// CabbiePath is the Windows path to the cabbie files.
+	CabbiePath = `C:\Program Files\Google\Cabbie\`
 	// WUReg is the registry path to the local update client configuration.
 	WUReg = `SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate`
 	// MetricSvc is service name of a metric.
@@ -53,6 +57,7 @@ const (
 var (
 	now            = time.Now
 	rebootRequired = RebootRequired
+	psPath         = os.ExpandEnv("${windir}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")
 	// RegPath is the registry path to the cabbie settings.
 	RegPath = `SOFTWARE\Google\Cabbie\`
 )
@@ -293,4 +298,26 @@ func SliceContains(slice interface{}, v interface{}) bool {
 		}
 	}
 	return false
+}
+
+// RunScript will execute a defined PowerShell script with a timeout.
+func RunScript(name string) error {
+	var cmd *exec.Cmd
+	cmd = exec.Command(psPath, "-NonInteractive", "-NoProfile", "-NoLogo", "-File", filepath.Join(CabbiePath, name))
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("runScript: executing script %q returned error: %v", name, err)
+	}
+
+	timer := time.AfterFunc(time.Duration(10)*time.Minute, func() {
+		cmd.Process.Kill()
+	})
+
+	wErr := cmd.Wait()
+
+	if !timer.Stop() {
+		return fmt.Errorf("runScript: time limit reached, killed script %q", name)
+	}
+
+	return wErr
 }
