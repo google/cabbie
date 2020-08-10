@@ -36,6 +36,19 @@ These options can be configured using the registry key at
 | AukeraPort        |REG_DWORD     |9119                                                        |LocalHost port to check against for Aukera maintenance windows.                                                                             |
 | AukeraName        |REG_SZ        |"Cabbie"                                                    |Aukera maintenance window label to query for to determine if a maintenance window is currently open.                                        |
 
+### Pre/Post Update script execution
+
+Cabbie has the ability to run predefined scripts before and after each Windows
+update install session. The each script is execute with a 10 minute timeout and
+will be automatically stopped if the timeout is reached.
+
+The scripts will need to be PowerShell scripts named `PreUpdate.ps1` and/or
+`PostUpdate.ps1` located in the Cabbie root directory
+(`C:\Program Files\Google\Cabbie`).
+
+**PreUpdate.ps1**: This script will be executed once before the fist update in the collection is download and installed.
+
+**PostUpdate.ps1**: This script will be executed after the last update in the collection is installed.
 
 ## Command-line Usage
 
