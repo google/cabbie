@@ -334,9 +334,11 @@ func (i *installCmd) installUpdates() error {
 	if installingMinOneUpdate {
 		exist, err := cablib.PathExists(filepath.Join(cablib.CabbiePath, "PostUpdate.ps1"))
 		if err != nil {
-			elog.Error(307, fmt.Sprintf("PostUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PreUpdate.ps1", err))
+			elog.Error(307, fmt.Sprintf("PostUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PostUpdate.ps1", err))
 		} else if exist {
-			cablib.RunScript("PostUpdate.ps1")
+			if err := cablib.RunScript("PostUpdate.ps1"); err != nil {
+				elog.Error(308, fmt.Sprintf("PostUpdateScript: error executing script:\n%v", err))
+			}
 		}
 	}
 	if rebootRequired {
