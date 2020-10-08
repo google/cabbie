@@ -1,5 +1,7 @@
 # Cabbie
 
+[![Go Tests](https://github.com/google/cabbie/workflows/Go%20Tests/badge.svg)](https://github.com/google/cabbie/actions?query=workflow%3A%22Go+Tests%22)
+
 ## Overview
 Cabbie is a standalone Go binary that utilizes the Windows Update Agent API to
 search, download, and install Windows Updates. Cabbie can be configured to
