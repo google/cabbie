@@ -20,6 +20,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"strings"
 	"time"
@@ -68,6 +70,8 @@ type Settings struct {
 	AukeraEnabled uint64
 	AukeraPort    uint64
 	AukeraName    string
+
+	PprofPort uint64
 }
 
 type tickers struct {
@@ -153,6 +157,9 @@ func (s *Settings) regLoad(path string) error {
 	}
 	if i, _, err := k.GetIntegerValue("AukeraPort"); err == nil {
 		s.AukeraPort = i
+	}
+	if i, _, err := k.GetIntegerValue("PprofPort"); err == nil {
+		s.PprofPort = i
 	}
 
 	return nil
@@ -494,6 +501,13 @@ func main() {
 	config = newSettings()
 	if err = config.regLoad(cablib.RegPath); err != nil {
 		elog.Error(6, fmt.Sprintf("Failed to load Cabbie config, using defaults:\n%v\nError:%v", config, err))
+	}
+
+	// If a profiling port is specified, start an HTTP server
+	if config.PprofPort != 0 {
+		go func() {
+			http.ListenAndServe(fmt.Sprintf("localhost:%d", config.PprofPort), nil)
+		}()
 	}
 
 	isIntSess, err := svc.IsAnInteractiveSession()
