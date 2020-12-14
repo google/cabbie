@@ -34,23 +34,21 @@ func (historyCmd) Name() string     { return "history" }
 func (historyCmd) Synopsis() string { return "Get a list of all the installed updates on the device." }
 func (historyCmd) Usage() string {
 	return fmt.Sprintf("%s history\n", filepath.Base(os.Args[0]))
-
 }
 func (c *historyCmd) SetFlags(f *flag.FlagSet) {}
 
 func (c *historyCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
-	rc := subcommands.ExitSuccess
 	h, err := history()
 	if err != nil {
 		fmt.Printf("Failed to get update history: %s", err)
 		elog.Error(111, fmt.Sprintf("Failed to get Update history: %s", err))
-		rc = subcommands.ExitFailure
+		return subcommands.ExitFailure
 	}
 	defer h.Close()
 	for _, e := range h.Entries {
 		fmt.Printf("Installed update:\n%v\n\n", e)
 	}
-	return rc
+	return subcommands.ExitSuccess
 }
 
 func history() (*updatehistory.History, error) {
