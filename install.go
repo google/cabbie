@@ -34,8 +34,8 @@ import (
 
 // Available flags
 type installCmd struct {
-	drivers, deadlineOnly, virusDef bool
-	kbs                             string
+	drivers, deadlineOnly, Interactive, virusDef bool
+	kbs                                          string
 }
 
 type installRsp struct {
@@ -177,6 +177,10 @@ func (i *installCmd) installUpdates() error {
 		}
 
 		if rebootRequired {
+			if i.Interactive {
+				fmt.Println("Host has existing updates pending reboot.")
+				return nil
+			}
 			t, err := cablib.RebootTime()
 			if err != nil {
 				return fmt.Errorf("Error getting reboot time: %v", err)
@@ -190,8 +194,8 @@ func (i *installCmd) installUpdates() error {
 				}
 			}
 			rebootEvent <- rebootRequired
-			return nil
 		}
+		return nil
 	}
 
 	// Start Windows update session
@@ -341,7 +345,12 @@ func (i *installCmd) installUpdates() error {
 			}
 		}
 	}
+
 	if rebootRequired {
+		if i.Interactive {
+			fmt.Println("Updates have been installed, please reboot to complete the installation...")
+			return nil
+		}
 		rebootMessage(int(config.RebootDelay))
 		if err := cablib.SetRebootTime(config.RebootDelay); err != nil {
 			elog.Error(306, fmt.Sprintf("Failed to run reboot command:\n%v", err))

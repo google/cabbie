@@ -199,7 +199,6 @@ func NewCOMObject(id string) (*ole.IDispatch, error) {
 
 // RebootRequired indicates whether a system restart is required.
 func RebootRequired() (bool, error) {
-
 	sysinfo, err := NewCOMObject("Microsoft.Update.SystemInfo")
 	if err != nil {
 		return false, err

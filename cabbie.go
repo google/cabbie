@@ -298,7 +298,7 @@ func runMainLoop() error {
 	for {
 		select {
 		case <-t.Default.C:
-			i := installCmd{}
+			i := installCmd{Interactive: false}
 			err := i.installUpdates()
 			if e := updateInstallSuccess.Set(err == nil); e != nil {
 				elog.Error(6, fmt.Sprintf("Error posting metric:\n%v", e))
@@ -321,7 +321,7 @@ func runMainLoop() error {
 				break
 			}
 			if s[0].State == "open" {
-				i := installCmd{}
+				i := installCmd{Interactive: false}
 				err := i.installUpdates()
 				if e := updateInstallSuccess.Set(err == nil); e != nil {
 					elog.Error(6, fmt.Sprintf("Error posting updateInstallSuccess metric:\n%v", e))
@@ -363,13 +363,13 @@ func runMainLoop() error {
 			}
 
 			if config.Deadline != 0 {
-				i := installCmd{deadlineOnly: true}
+				i := installCmd{Interactive: false, deadlineOnly: true}
 				if err := i.installUpdates(); err != nil {
 					elog.Error(6, fmt.Sprintf("Error installing system updates:\n%v", err))
 				}
 			}
 		case <-t.Virus.C:
-			i := installCmd{virusDef: true}
+			i := installCmd{Interactive: false, virusDef: true}
 			err := i.installUpdates()
 			if e := virusUpdateSuccess.Set(err == nil); e != nil {
 				elog.Error(6, fmt.Sprintf("Error posting virusUpdateSuccess metric:\n%v", err))
@@ -379,7 +379,7 @@ func runMainLoop() error {
 				break
 			}
 		case <-t.Driver.C:
-			i := installCmd{drivers: true}
+			i := installCmd{Interactive: false, drivers: true}
 			err := i.installUpdates()
 			if e := driverUpdateSuccess.Set(err == nil); e != nil {
 				elog.Error(6, fmt.Sprintf("Error posting driverUpdateSuccess metric:\n%v", e))
@@ -546,7 +546,7 @@ func main() {
 
 	subcommands.Register(&hideCmd{}, "Update management")
 	subcommands.Register(&historyCmd{}, "Update management")
-	subcommands.Register(&installCmd{}, "Update management")
+	subcommands.Register(&installCmd{Interactive: true}, "Update management")
 	subcommands.Register(&listCmd{}, "Update management")
 	subcommands.Register(&serviceCmd{}, "Service registration management")
 
