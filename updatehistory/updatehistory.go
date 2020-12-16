@@ -55,38 +55,33 @@ type Entry struct {
 }
 
 // New expands an IUpdateHistoryEntry object into a usable go struct
-func New(item *ole.IDispatch) (*Entry, []error) {
-	var errors []error
+func New(item *ole.IDispatch) (*Entry, error) {
 	e := &Entry{Item: item}
 
 	fields := reflect.TypeOf(*e)
 	data := make(map[string]interface{})
-	var err error
 	for i := 0; i < fields.NumField(); i++ {
 		field := fields.Field(i)
 		p := field.Name
 		switch field.Type.String() {
 		case "string":
-			data[p], err = e.toString(p)
+			data[p], _ = e.toString(p)
 		case "int":
-			data[p], err = e.toInt(p)
+			data[p], _ = e.toInt(p)
 		case "time.Time":
-			data[p], err = e.toDateTime(p)
+			data[p], _ = e.toDateTime(p)
 		case "[]updates.Category":
-			data[p], err = e.toCategories(p)
+			data[p], _ = e.toCategories(p)
 		case "updates.Identity":
-			data[p], err = e.toIdentity(p)
-		}
-		if err != nil {
-			errors = append(errors, err)
+			data[p], _ = e.toIdentity(p)
 		}
 	}
 
 	if err := e.fillStruct(data); err != nil {
-		errors = append(errors, err)
+		return nil, err
 	}
 
-	return e, errors
+	return e, nil
 }
 
 func (e *Entry) toString(property string) (string, error) {
@@ -100,7 +95,7 @@ func (e *Entry) toString(property string) (string, error) {
 func (e *Entry) toInt(property string) (int, error) {
 	p, err := oleutil.GetProperty(e.Item, property)
 	if err != nil {
-		return 0, err
+		return 0, nil
 	}
 
 	if p.Value() == nil {
@@ -235,7 +230,7 @@ func Get(searchInterface *search.Searcher) (*History, error) {
 		return nil, err
 	}
 
-	h.Entries = make([]*Entry, count)
+	h.Entries = make([]*Entry, 0)
 	for i := 0; i < count; i++ {
 		item, err := oleutil.GetProperty(h.IUpdateHistoryEntryCollection, "item", i)
 		if err != nil {
@@ -244,13 +239,17 @@ func Get(searchInterface *search.Searcher) (*History, error) {
 		}
 		itemd := item.ToIDispatch()
 
-		uh, errors := New(itemd)
-		if errors != nil {
+		uh, err := New(itemd)
+		if err != nil {
 			itemd.Release()
 			h.Close()
-			return nil, fmt.Errorf("errors in update enumeration: %v", errors)
+			return nil, fmt.Errorf("errors in update enumeration: %v", err)
 		}
-		h.Entries[i] = uh
+
+		// Weed out random invalid entries that show up for some reason.
+		if uh.Operation != 0 {
+			h.Entries = append(h.Entries, uh)
+		}
 	}
 
 	return &h, nil

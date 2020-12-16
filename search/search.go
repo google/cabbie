@@ -214,7 +214,7 @@ func (s *Searcher) GetTotalHistoryCount() (int, error) {
 func (s *Searcher) QueryHistory(count int) (*ole.IDispatch, error) {
 	h, err := oleutil.CallMethod(s.IUpdateSearcher, "QueryHistory", 0, count)
 	if err != nil {
-		return nil, fmt.Errorf("error querying  list of installed updates: %v", err)
+		return nil, fmt.Errorf("error querying list of installed updates: %v", err)
 	}
 	return h.ToIDispatch(), nil
 }
