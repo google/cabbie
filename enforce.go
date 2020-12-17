@@ -102,7 +102,7 @@ func (e *enforcement) dedupe() {
 
 func (e *enforcement) install() error {
 	if len(e.Required) == 0 {
-		elog.Info(0002, fmt.Sprintf("No enforced updates defined."))
+		elog.Info(0002, "No enforced updates defined.")
 		return nil
 	}
 	i := installCmd{kbs: strings.Join(e.Required, ",")}

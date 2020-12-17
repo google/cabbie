@@ -14,7 +14,6 @@
 package main
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -65,7 +64,7 @@ func TestString(t *testing.T) {
 		{NewKBSet("KB123456"), "[KB123456]"},
 		{NewKBSet("KB123456,KB987654"), "[KB123456 KB987654]"},
 	} {
-		o := fmt.Sprintf("%s", tt.in)
+		o := tt.in.String()
 		if o != tt.out {
 			t.Errorf("got %s, want %s", o, tt.out)
 		}
