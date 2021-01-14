@@ -187,5 +187,15 @@ func (w *WSUS) Clear() error {
 
 	k.DeleteValue("WUServer")
 	k.DeleteValue("WUStatusServer")
-	return registry.DeleteKey(k, "AU")
+
+	auk, err := registry.OpenKey(k, "AU", registry.ALL_ACCESS)
+	if err == registry.ErrNotExist {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	defer auk.Close()
+
+	return auk.DeleteValue("UseWUServer")
 }
