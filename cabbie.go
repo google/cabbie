@@ -510,7 +510,7 @@ func main() {
 		}()
 	}
 
-	isIntSess, err := svc.IsAnInteractiveSession()
+	isSvc, err := svc.IsWindowsService()
 	if err != nil {
 		elog.Error(6, fmt.Sprintf("Failed to determine if we are running in an interactive session: %v", err))
 		os.Exit(2)
@@ -529,7 +529,7 @@ func main() {
 
 	// Running as Service.
 	// TODO: move service logic into its own subcommand.
-	if !isIntSess && len(os.Args) == 1 {
+	if isSvc && len(os.Args) == 1 {
 		if err := startService(*runInDebug); err != nil {
 			elog.Error(1, fmt.Sprintf("Failed to run service: %v", err))
 			os.Exit(2)
