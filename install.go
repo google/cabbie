@@ -194,8 +194,8 @@ func (i *installCmd) installUpdates() error {
 				}
 			}
 			rebootEvent <- rebootRequired
+			return nil
 		}
-		return nil
 	}
 
 	// Start Windows update session
