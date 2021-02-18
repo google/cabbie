@@ -39,7 +39,7 @@ type Category struct {
 	CategoryID string
 }
 
-// Update contains the  update interface and properties that are available to an update.
+// Update contains the update interface and properties that are available to an update.
 type Update struct {
 	Item                     *ole.IDispatch
 	Title                    string
