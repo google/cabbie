@@ -64,7 +64,6 @@ var (
 
 // StringToSlice converts a comma separated string to a slice.
 func StringToSlice(s string) []string {
-
 	if strings.TrimSpace(s) == "" {
 		return nil
 	}
@@ -84,18 +83,6 @@ func StringInSlice(e string, s []string) bool {
 		}
 	}
 	return false
-}
-
-// InitializeCOM safely initializes the COM library for use by the calling thread.
-func InitializeCOM() error {
-	//TODO: remove multiple calls to this function.
-	if err := ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED); err != nil {
-		oleCode := err.(*ole.OleError).Code()
-		if oleCode != ole.S_OK && oleCode != S_FALSE {
-			return fmt.Errorf("failed to start OLE initialization: %v", err)
-		}
-	}
-	return nil
 }
 
 // SetRebootTime creates the reboot time key.

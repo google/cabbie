@@ -32,11 +32,11 @@ import (
 	"github.com/google/cabbie/cablib"
 	"github.com/google/cabbie/servicemgr"
 	"github.com/google/aukera/client"
+	"github.com/scjalliance/comshim"
 	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows/svc/debug"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc"
-	"github.com/go-ole/go-ole"
 	"github.com/google/subcommands"
 )
 
@@ -521,11 +521,8 @@ func main() {
 		elog.Error(6, err.Error())
 	}
 
-	if err := cablib.InitializeCOM(); err != nil {
-		elog.Error(6, err.Error())
-		os.Exit(1)
-	}
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 
 	// Running as Service.
 	// TODO: move service logic into its own subcommand.
