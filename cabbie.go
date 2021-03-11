@@ -44,7 +44,7 @@ var (
 	elog             debug.Log
 	runInDebug       = flag.Bool("debug", false, "Run in debug mode")
 	config           = new(Settings)
-	categoryDefaults = []string{"Critical Updates", "Definition Updates", "Security Updates"}
+	categoryDefaults = []string{"Critical Updates", "Definition Updates", "Security Updates", "Upgrades"}
 	rebootEvent      = make(chan bool, 10)
 	rebootActive     = false
 
