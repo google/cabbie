@@ -62,6 +62,8 @@ const (
 	UpdateRollups CategoryID = "28BC880E-0592-4CBF-8F95-C79B17911D5F"
 	// Updates GUID
 	Updates CategoryID = "CD5FFD1E-E932-4E3A-BF74-18BF0B1BBD83"
+	// Upgrades GUID
+	Upgrades CategoryID = "3689BDC8-B205-4AF4-8D4A-A63924C5E9D5"
 	// BasicSearch is the default search to query for assigned updates that are not installed
 	BasicSearch = "IsInstalled=0 and DeploymentAction='Installation'"
 )
