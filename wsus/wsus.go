@@ -92,7 +92,7 @@ func Init(servers []string) (*WSUS, error) {
 
 	if len(servers) == 0 {
 		w.ServerSelection = WindowsUpdate
-		return &w, w.Clear()
+		return &w, nil
 	}
 
 	wlog, err = eventlog.Open("Cabbie WSUS")
