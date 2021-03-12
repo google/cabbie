@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"flag"
 	"github.com/google/cabbie/search"
@@ -88,6 +89,7 @@ func listUpdates(hidden bool) ([]string, []string, error) {
 	defer uc.Close()
 
 	var reqUpdates, optUpdates []string
+	devicePatched := true
 	for _, u := range uc.Updates {
 		// Add to optional updates list if the update does not match the required categories.
 		if !u.InCategories(config.RequiredCategories) {
@@ -97,8 +99,13 @@ func listUpdates(hidden bool) ([]string, []string, error) {
 		// Skip virus updates as they always exist.
 		if !u.InCategories([]string{"Definition Updates"}) {
 			reqUpdates = append(reqUpdates, u.Title)
+			if (time.Now().Sub(u.LastDeploymentChangeTime).Hours() / 24) > 31 {
+				if devicePatched == true {
+					devicePatched = false
+				}
+			}
 		}
 	}
-
+	deviceIsPatched.Set(devicePatched)
 	return reqUpdates, optUpdates, nil
 }

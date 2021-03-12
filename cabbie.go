@@ -54,6 +54,7 @@ var (
 	driverUpdateSuccess        = new(metrics.Bool)
 	updateInstallSuccess       = new(metrics.Bool)
 	rebootRequired             = new(metrics.Bool)
+	deviceIsPatched            = new(metrics.Bool)
 	requiredUpdateCount        = new(metrics.Int)
 	enforcedUpdateCount        = new(metrics.Int)
 	enforcementWatcherFailures = new(metrics.Int)
@@ -204,6 +205,10 @@ func initMetrics() error {
 	rebootRequired, err = metrics.NewBool(cablib.MetricRoot+"rebootRequired", cablib.MetricSvc)
 	if err != nil {
 		return fmt.Errorf("unable to initialize rebootRequired metric: %v", err)
+	}
+	deviceIsPatched, err = metrics.NewBool(cablib.MetricRoot+"deviceIsPatched", cablib.MetricSvc)
+	if err != nil {
+		return fmt.Errorf("unable to initialize deviceIsPatched metric: %v", err)
 	}
 
 	// integer metrics
