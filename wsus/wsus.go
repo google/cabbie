@@ -92,7 +92,7 @@ func Init(servers []string) (*WSUS, error) {
 
 	if len(servers) == 0 {
 		w.ServerSelection = WindowsUpdate
-		return &w, nil
+		return &w, w.Clear()
 	}
 
 	wlog, err = eventlog.Open("Cabbie WSUS")
@@ -185,8 +185,14 @@ func (w *WSUS) Clear() error {
 	}
 	defer k.Close()
 
-	k.DeleteValue("WUServer")
-	k.DeleteValue("WUStatusServer")
+	err = k.DeleteValue("WUServer")
+	if err != nil && err != registry.ErrNotExist {
+		wlog.Warning(4, fmt.Sprintf("Failed to delete WUServer registry value: %v", err))
+	}
+	err = k.DeleteValue("WUStatusServer")
+	if err != nil && err != registry.ErrNotExist {
+		wlog.Warning(4, fmt.Sprintf("Failed to delete WUStatusServer registry value: %v", err))
+	}
 
 	auk, err := registry.OpenKey(k, "AU", registry.ALL_ACCESS)
 	if err == registry.ErrNotExist {
@@ -197,5 +203,9 @@ func (w *WSUS) Clear() error {
 
 	defer auk.Close()
 
-	return auk.DeleteValue("UseWUServer")
+	err = auk.DeleteValue("UseWUServer")
+	if err != nil && err != registry.ErrNotExist {
+		return fmt.Errorf("Failed to delete UseWUServer registry value: %v", err)
+	}
+	return nil
 }
