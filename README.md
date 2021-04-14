@@ -37,12 +37,14 @@ These options can be configured using the registry key at
 | AukeraEnabled     |REG_DWORD     |0                                                           |Enable Cabbie to use the open source Aukera maintenance window manager.                                                                     |
 | AukeraPort        |REG_DWORD     |9119                                                        |LocalHost port to check against for Aukera maintenance windows.                                                                             |
 | AukeraName        |REG_SZ        |"Cabbie"                                                    |Aukera maintenance window label to query for to determine if a maintenance window is currently open.                                        |
+| ScriptTimeout     |REG_DWORD     |10                                                          |Pre/Post Update script timeout in minutes.                                                                                                  |
 
 ### Pre/Post Update script execution
 
 Cabbie has the ability to run predefined scripts before and after each Windows
-update install session. The each script is execute with a 10 minute timeout and
-will be automatically stopped if the timeout is reached.
+update install session. Each script is executed with a configurable timeout
+(default 10 minutes) and will be automatically stopped if the timeout is
+reached.
 
 The scripts will need to be PowerShell scripts named `PreUpdate.ps1` and/or
 `PostUpdate.ps1` located in the Cabbie root directory

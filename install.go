@@ -285,7 +285,7 @@ func (i *installCmd) installUpdates() error {
 			if err != nil {
 				elog.Error(207, fmt.Sprintf("PreUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PreUpdate.ps1", err))
 			} else if exist {
-				if err := cablib.RunScript("PreUpdate.ps1"); err != nil {
+				if err := cablib.RunScript("PreUpdate.ps1", config.ScriptTimeout); err != nil {
 					elog.Error(208, fmt.Sprintf("PreUpdateScript: error running script:\n%v", err))
 				}
 			}
@@ -340,7 +340,7 @@ func (i *installCmd) installUpdates() error {
 		if err != nil {
 			elog.Error(307, fmt.Sprintf("PostUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PostUpdate.ps1", err))
 		} else if exist {
-			if err := cablib.RunScript("PostUpdate.ps1"); err != nil {
+			if err := cablib.RunScript("PostUpdate.ps1", config.ScriptTimeout); err != nil {
 				elog.Error(308, fmt.Sprintf("PostUpdateScript: error executing script:\n%v", err))
 			}
 		}

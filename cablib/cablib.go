@@ -284,8 +284,8 @@ func SliceContains(slice interface{}, v interface{}) bool {
 	return false
 }
 
-// RunScript will execute a defined PowerShell script with a timeout.
-func RunScript(name string) error {
+// RunScript will execute a defined PowerShell script with a timeout in minutes.
+func RunScript(name string, timeout uint64) error {
 	var cmd *exec.Cmd
 	cmd = exec.Command(psPath, "-NonInteractive", "-NoProfile", "-NoLogo", "-File", filepath.Join(CabbiePath, name))
 
@@ -293,7 +293,7 @@ func RunScript(name string) error {
 		return fmt.Errorf("runScript: executing script %q returned error: %v", name, err)
 	}
 
-	timer := time.AfterFunc(time.Duration(10)*time.Minute, func() {
+	timer := time.AfterFunc(time.Duration(timeout)*time.Minute, func() {
 		cmd.Process.Kill()
 	})
 
