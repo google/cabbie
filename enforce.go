@@ -14,7 +14,7 @@
 
 // +build windows
 
-// TODO: Add support for hidden KBs
+// TODO: Add support for hidden KBs.
 
 // Enforce implements filesystem watching for configured required updates.
 package main
