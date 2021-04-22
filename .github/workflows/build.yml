@@ -1,0 +1,49 @@
+name:  Cabbie Continuous Integration
+
+# Trigger on every master branch push and pull request
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+jobs:
+  build:
+    strategy:
+      matrix:
+        targetplatform: [x64]
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Setup go
+      uses: actions/setup-go@v2
+
+    - run: go build
+
+    - name: Create tag
+      id: create_tag
+      uses: paulhatch/semantic-version@v4.0.1
+      with: 
+        tag_prefix: "v"
+        major_pattern: "(MAJOR)"
+        minor_pattern: "(MINOR)"
+        format: "${major}.${minor}.${patch}"
+        namespace: cabbie
+        short_tags: false
+        bump_each_commit: false
+      if: github.event_name == 'push'
+
+    - name: Cut release
+      uses: ncipollo/release-action@v1
+      with:
+        allowUpdates: false
+        artifacts: "cabbie.exe"
+        tag: ${{ steps.create_tag.outputs.version }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+      if: github.event_name == 'push'
