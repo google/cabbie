@@ -40,7 +40,7 @@ type enforcement struct {
 func enforcements(path string) (enforcement, error) {
 	path = filepath.Clean(path)
 	// Enforcement files must live in Cabbie's directory. If given a relative path,
-	// attempt a lookup by joining Cabbie's path and the given string.
+	// attempt a lookup by joining Cabbie's path and the given string
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(enforceDir, path)
 	}
