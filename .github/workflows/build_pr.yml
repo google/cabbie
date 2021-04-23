@@ -1,4 +1,4 @@
-name:  Cabbie Continuous Integration
+name:  Ensure PR builds
 
 # Trigger on every master branch push and pull request
 on:
