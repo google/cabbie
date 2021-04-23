@@ -1,4 +1,4 @@
-name:  Cabbie Continuous Integration
+name:  Create Release
 
 # Trigger on every master branch push and pull request
 on:
