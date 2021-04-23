@@ -29,7 +29,7 @@ jobs:
       with: 
         tag_prefix: "v"
         major_pattern: "(MAJOR)"
-        minor_pattern: "(/[\\s]*/)"
+        minor_pattern: "/[\\s]*/"
         format: "${major}.${minor}"
         namespace: cabbie
         short_tags: false
