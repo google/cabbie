@@ -40,5 +40,5 @@ jobs:
       with:
         allowUpdates: false
         artifacts: "cabbie.exe"
-        tag: ${{ steps.create_tag.outputs.version }}
+        tag: ${{ steps.create_tag.outputs.version_tag }}
         token: ${{ secrets.GITHUB_TOKEN }}
