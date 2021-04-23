@@ -1,6 +1,6 @@
 name:  Create Release
 
-# Trigger on every master branch push and pull request
+# Trigger on every master branch push
 on:
   push:
     branches:
