@@ -1,6 +1,6 @@
 name:  Manual Tag and Release
 
-# Trigger on every master branch push and pull request
+# Trigger on manually created tags
 on:
   push:
     tags:
