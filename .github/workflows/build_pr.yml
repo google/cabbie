@@ -1,6 +1,6 @@
 name:  Ensure PR builds
 
-# Trigger on every master branch push and pull request
+# Trigger on every pull request to master
 on:
   pull_request:
     branches:
