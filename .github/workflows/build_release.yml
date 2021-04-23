@@ -1,4 +1,4 @@
-name:  Create Release
+name:  Build Release
 
 # Trigger on every master branch push
 on:
