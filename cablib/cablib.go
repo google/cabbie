@@ -24,11 +24,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-ole/go-ole"
+	"github.com/go-ole/go-ole/oleutil"
 	"github.com/google/cabbie/notification"
 	"github.com/google/cabbie/reboot"
 	"golang.org/x/sys/windows/registry"
-	"github.com/go-ole/go-ole"
-	"github.com/go-ole/go-ole/oleutil"
 )
 
 const (
@@ -255,6 +255,22 @@ func SetField(obj interface{}, name string, value interface{}) error {
 	}
 
 	return fmt.Errorf("provided value type (%v) didn't match obj field type (%v)", val.Type(), structFieldType)
+}
+
+// FileExists used for determining if given file exists.
+func FileExists(path string) (bool, error) {
+	if path == "" {
+		return false, fmt.Errorf("pathExists: received empty string to test")
+	}
+	p, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	return !p.IsDir(), nil
 }
 
 // PathExists used for determining if given path exists.
