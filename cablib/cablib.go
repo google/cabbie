@@ -260,7 +260,7 @@ func SetField(obj interface{}, name string, value interface{}) error {
 // FileExists used for determining if given file exists.
 func FileExists(path string) (bool, error) {
 	if path == "" {
-		return false, fmt.Errorf("pathExists: received empty string to test")
+		return false, fmt.Errorf("fileExists: received empty string to test")
 	}
 	p, err := os.Stat(path)
 	if os.IsNotExist(err) {
