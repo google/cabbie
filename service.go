@@ -22,10 +22,10 @@ import (
 
 	"flag"
 	"github.com/google/cabbie/cablib"
+	"github.com/google/subcommands"
+	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc/mgr"
-	"golang.org/x/sys/windows/svc"
-	"github.com/google/subcommands"
 )
 
 // Available flags.
@@ -82,6 +82,15 @@ func installService(name, desc string) error {
 	exepath, err := filepath.Abs(cablib.CabbiePath + cablib.CabbieExe)
 	if err != nil {
 		return err
+	}
+
+	// Check that cabbie.exe is a file & exists at exepath
+	isFile, err := cablib.FileExists(exepath)
+	if err != nil {
+		return err
+	}
+	if !isFile {
+		return fmt.Errorf("%v does not exist or is a directory.", exepath)
 	}
 
 	m, err := mgr.Connect()
