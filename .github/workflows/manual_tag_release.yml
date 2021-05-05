@@ -1,0 +1,31 @@
+name:  Manual Tag and Release
+
+# Trigger on manually created tags
+on:
+  push:
+    tags:
+      - '*'
+jobs:
+  build:
+    strategy:
+      matrix:
+        targetplatform: [x64]
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Setup go
+      uses: actions/setup-go@v2
+
+    - run: go build 
+
+    - name: Cut release
+      uses: ncipollo/release-action@v1
+      with:
+        allowUpdates: true
+        artifacts: "cabbie.exe"
+        token: ${{ secrets.GITHUB_TOKEN }}
