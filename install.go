@@ -22,11 +22,10 @@ import (
 	"time"
 
 	"flag"
-
+	"github.com/google/cabbie/notification"
 	"github.com/google/cabbie/cablib"
 	"github.com/google/cabbie/download"
 	"github.com/google/cabbie/install"
-	"github.com/google/cabbie/notification"
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatecollection"
@@ -180,7 +179,6 @@ func (i *installCmd) installUpdates() error {
 		if rebootRequired {
 			if i.Interactive {
 				fmt.Println("Host has existing updates pending reboot.")
-				rebootEvent <- rebootRequired
 				return nil
 			}
 			t, err := cablib.RebootTime()
@@ -351,7 +349,6 @@ func (i *installCmd) installUpdates() error {
 	if rebootRequired {
 		if i.Interactive {
 			fmt.Println("Updates have been installed, please reboot to complete the installation...")
-			rebootEvent <- rebootRequired
 			return nil
 		}
 		rebootMessage(int(config.RebootDelay))
