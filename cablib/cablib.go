@@ -25,10 +25,10 @@ import (
 	"time"
 
 	"github.com/google/cabbie/notification"
-	"github.com/google/cabbie/reboot"
 	"golang.org/x/sys/windows/registry"
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
+	"github.com/google/glazier/go/power"
 )
 
 const (
@@ -155,7 +155,7 @@ func SystemReboot(t time.Time) error {
 	if err := cleanRebootValue(); err != nil {
 		return fmt.Errorf("failed to clean up registry value %q: %v", rebootValue, err)
 	}
-	return reboot.Now()
+	return power.Reboot(power.SHTDN_REASON_MAJOR_SOFTWARE, true)
 }
 
 // Count gets the count property of an IDispatch object.
