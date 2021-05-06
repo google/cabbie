@@ -29,9 +29,10 @@ import (
 
 	"github.com/google/cabbie/cablib"
 	"gopkg.in/fsnotify/fsnotify.v1"
+	"github.com/google/glazier/go/helpers"
 )
 
-const enforceDir = "C:\\ProgramData\\Cabbie"
+const enforceDir = `C:\ProgramData\Cabbie`
 
 type enforcement struct {
 	Required []string `json:"required"`
@@ -47,7 +48,7 @@ func enforcements(path string) (enforcement, error) {
 	if filepath.Ext(path) != ".json" {
 		return enforcement{}, fmt.Errorf("getEnforcement: file %q is not json", path)
 	}
-	b, err := cablib.PathExists(path)
+	b, err := helpers.PathExists(path)
 	if err != nil {
 		return enforcement{}, fmt.Errorf("getEnforcement: error determining %q existence: %v", path, err)
 	}
@@ -119,7 +120,7 @@ func runEnforcementWatcher(file chan<- string) error {
 	}
 	defer fsw.Close()
 
-	exist, err := cablib.PathExists(enforceDir)
+	exist, err := helpers.PathExists(enforceDir)
 	if err != nil {
 		return fmt.Errorf("enforce: error checking existence of %q:\n%v", enforceDir, err)
 	}

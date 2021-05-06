@@ -30,6 +30,7 @@ import (
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatecollection"
 	"github.com/google/subcommands"
+	"github.com/google/glazier/go/helpers"
 )
 
 // Available flags
@@ -280,12 +281,12 @@ func (i *installCmd) installUpdates() error {
 		if !installMsgPopped && !u.InCategories([]string{"Definition Updates"}) {
 			installingMessage()
 			installMsgPopped = true
-
-			exist, err := cablib.PathExists(filepath.Join(cablib.CabbiePath, "PreUpdate.ps1"))
+			ps := filepath.Join(cablib.CabbiePath, "PreUpdate.ps1")
+			exist, err := helpers.PathExists(ps)
 			if err != nil {
 				elog.Error(207, fmt.Sprintf("PreUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PreUpdate.ps1", err))
 			} else if exist {
-				if err := cablib.RunScript("PreUpdate.ps1", config.ScriptTimeout); err != nil {
+				if _, err := helpers.ExecWithVerify(ps, nil, &config.ScriptTimeout, nil); err != nil {
 					elog.Error(208, fmt.Sprintf("PreUpdateScript: error running script:\n%v", err))
 				}
 			}
@@ -336,11 +337,12 @@ func (i *installCmd) installUpdates() error {
 	}
 
 	if installingMinOneUpdate {
-		exist, err := cablib.PathExists(filepath.Join(cablib.CabbiePath, "PostUpdate.ps1"))
+		ps := filepath.Join(cablib.CabbiePath, "PostUpdate.ps1")
+		exist, err := helpers.PathExists(ps)
 		if err != nil {
 			elog.Error(307, fmt.Sprintf("PostUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PostUpdate.ps1", err))
 		} else if exist {
-			if err := cablib.RunScript("PostUpdate.ps1", config.ScriptTimeout); err != nil {
+			if _, err := helpers.ExecWithVerify(ps, nil, &config.ScriptTimeout, nil); err != nil {
 				elog.Error(308, fmt.Sprintf("PostUpdateScript: error executing script:\n%v", err))
 			}
 		}

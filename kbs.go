@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/cabbie/cablib"
+	"github.com/google/glazier/go/helpers"
 )
 
 // KBSet models a group of update KBs
@@ -28,7 +28,7 @@ type KBSet struct {
 
 // NewKBSet creates a new KBSet given a comma-separated list of KB article IDs
 func NewKBSet(kbList string) KBSet {
-	kbSlice := cablib.StringToSlice(kbList)
+	kbSlice := helpers.StringToSlice(kbList)
 	kbMap := make(map[string]bool)
 	for _, kb := range kbSlice {
 		kb = strings.ReplaceAll(strings.ToLower(kb), "kb", "")

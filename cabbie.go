@@ -74,7 +74,7 @@ type Settings struct {
 
 	PprofPort uint64
 
-	ScriptTimeout uint64
+	ScriptTimeout time.Duration
 }
 
 type tickers struct {
@@ -111,7 +111,7 @@ func newSettings() *Settings {
 		Deadline:           14,
 		NotifyAvailable:    1,
 		AukeraPort:         9119,
-		ScriptTimeout:      10,
+		ScriptTimeout:      10 * time.Minute,
 	}
 }
 
@@ -166,7 +166,7 @@ func (s *Settings) regLoad(path string) error {
 		s.PprofPort = i
 	}
 	if i, _, err := k.GetIntegerValue("ScriptTimeout"); err == nil {
-		s.ScriptTimeout = i
+		s.ScriptTimeout = time.Duration(i) * time.Minute
 	}
 
 	return nil
