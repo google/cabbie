@@ -14,7 +14,7 @@
 
 // +build windows
 
-// Package search handels querying for Windows updates.
+// Package search handles querying for Windows updates.
 package search
 
 import (
@@ -48,6 +48,8 @@ const (
 	DefinitionUpdates CategoryID = "E0789628-CE08-4437-BE74-2495B842F43B"
 	// DeveloperKits GUID
 	DeveloperKits CategoryID = "E140075D-8433-45C3-AD87-E72345B36078"
+	// Drivers GUID
+	Drivers CategoryID = "EBFC1FC5-71A4-4F7B-9ACA-3B9A503104A0"
 	// FeaturePacks GUID
 	FeaturePacks CategoryID = "B54E7D24-7ADD-428F-8B75-90A396FA584F"
 	// Guidance GUID
