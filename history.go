@@ -23,6 +23,7 @@ import (
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatehistory"
+	"github.com/google/logger"
 	"github.com/google/subcommands"
 )
 
@@ -41,7 +42,7 @@ func (c *historyCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interf
 	h, err := history()
 	if err != nil {
 		fmt.Printf("Failed to get update history: %s", err)
-		elog.Error(111, fmt.Sprintf("Failed to get Update history: %s", err))
+		logger.Error(fmt.Sprintf("Failed to get Update history: %s", err))
 		return subcommands.ExitFailure
 	}
 	defer h.Close()
@@ -66,6 +67,6 @@ func history() (*updatehistory.History, error) {
 	}
 	defer searcher.Close()
 
-	elog.Info(002, "Collecting installed updates...")
+	logger.Info("Collecting installed updates...")
 	return updatehistory.Get(searcher)
 }

@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/google/cabbie/cablib"
+	"github.com/google/logger"
 	"gopkg.in/fsnotify/fsnotify.v1"
 )
 
@@ -75,13 +76,13 @@ func allEnforcements() (enforcement, error) {
 		p := filepath.Join(enforceDir, f.Name())
 		kbs, err := enforcements(p)
 		if err != nil {
-			elog.Error(6, fmt.Sprintf("getAllEnforcements: error getting updates from %q:\n%v", p, err))
+			logger.Error(fmt.Sprintf("getAllEnforcements: error getting updates from %q:\n%v", p, err))
 			continue
 		}
 		e.Required = append(e.Required, kbs.Required...)
 	}
 	if err := enforcedUpdateCount.Set(int64(len(e.Required))); err != nil {
-		elog.Error(6, fmt.Sprintf("Error posting metric:\n%v", err))
+		logger.Error(fmt.Sprintf("Error posting metric:\n%v", err))
 	}
 	e.dedupe()
 	return e, nil
@@ -102,7 +103,7 @@ func (e *enforcement) dedupe() {
 
 func (e *enforcement) install() error {
 	if len(e.Required) == 0 {
-		elog.Info(0002, "No enforced updates defined.")
+		logger.Error("No enforced updates defined.")
 		return nil
 	}
 	i := installCmd{kbs: strings.Join(e.Required, ",")}
