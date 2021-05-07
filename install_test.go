@@ -19,6 +19,8 @@ import (
 
 	"github.com/google/cabbie/search"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/logger"
+	"io/ioutil"
 )
 
 type testInstallLog struct {
@@ -77,7 +79,7 @@ func TestGetCriteria(t *testing.T) {
 		{installCmd{kbs: "KB1234567"}, string(search.BasicSearch), nil},
 		{installCmd{}, string(search.BasicSearch), categoryDefaults},
 	} {
-		elog = new(testInstallLog)
+		logger.Init("CabbieTest", false, false, ioutil.Discard)
 		config = newFakeConfig()
 		oc, orc := tt.i.criteria()
 		if !(strings.Contains(oc, tt.outcriteria)) {

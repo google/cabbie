@@ -264,10 +264,10 @@ func (i *installCmd) installUpdates() error {
 			pastDeadline := time.Now().After(u.LastDeploymentChangeTime.Add(deadline))
 			if !pastDeadline {
 				logger.Info(
-					fmt.Sprintf("Skipping update %s.\nUpdate deployed on %v has not reached the %d day threshold."),
-					u.Title,
-					u.LastDeploymentChangeTime,
-					config.Deadline)
+					fmt.Sprintf("Skipping update %s.\nUpdate deployed on %v has not reached the %d day threshold.",
+						u.Title,
+						u.LastDeploymentChangeTime,
+						config.Deadline))
 				continue
 			}
 		}

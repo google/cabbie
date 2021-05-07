@@ -18,7 +18,9 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/logger"
 	"golang.org/x/sys/windows/registry"
+	"io/ioutil"
 )
 
 const (
@@ -55,7 +57,7 @@ func cleanupTestKey() error {
 
 func TestRegLoadKeyMissing(t *testing.T) {
 	// Setup
-	elog = new(testCabbieLog)
+	logger.Init("CabbieTest", false, false, ioutil.Discard)
 	expected := newSettings()
 	testconfig := newSettings()
 	// End Setup
@@ -69,7 +71,7 @@ func TestRegLoadKeyMissing(t *testing.T) {
 
 func TestRegLoadKeyEmpty(t *testing.T) {
 	// Setup
-	elog = new(testCabbieLog)
+	logger.Init("CabbieTest", false, false, ioutil.Discard)
 	if err := createTestKeys(); err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +103,7 @@ func TestRegLoadRequiredCategories(t *testing.T) {
 	k.Close()
 	defer cleanupTestKey()
 
-	elog = new(testCabbieLog)
+	logger.Init("CabbieTest", false, false, ioutil.Discard)
 	expected := newSettings()
 	expected.RequiredCategories = rc
 	testconfig := newSettings()

@@ -349,7 +349,7 @@ func runMainLoop() error {
 			setRebootMetric()
 			requiredUpdates, optionalUpdates, err := listUpdates(true)
 			if e := listUpdateSuccess.Set(err == nil); e != nil {
-				logger.Error("Error posting listUpdateSuccess metric:\n%v", e)
+				logger.Errorf("Error posting listUpdateSuccess metric:\n%v", e)
 			}
 			if err != nil {
 				logger.Error(fmt.Sprintf("Error getting the list of updates:\n%v", err))
