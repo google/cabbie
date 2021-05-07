@@ -115,7 +115,6 @@ func newSettings() *Settings {
 		NotifyAvailable:    1,
 		AukeraPort:         9119,
 		ScriptTimeout:      10 * time.Minute,
-		LogFile:            "",
 	}
 }
 
@@ -171,9 +170,6 @@ func (s *Settings) regLoad(path string) error {
 	}
 	if i, _, err := k.GetIntegerValue("ScriptTimeout"); err == nil {
 		s.ScriptTimeout = time.Duration(i) * time.Minute
-	}
-	if i, _, err := k.GetStringValue("LogFile"); err == nil {
-		s.LogFile = i
 	}
 
 	return nil
