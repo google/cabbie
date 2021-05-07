@@ -114,7 +114,7 @@ func newSettings() *Settings {
 		Deadline:           14,
 		NotifyAvailable:    1,
 		AukeraPort:         9119,
-		ScriptTimeout:      10,
+		ScriptTimeout:      10 * time.Minute,
 		LogFile:            "",
 	}
 }
