@@ -76,7 +76,7 @@ type Settings struct {
 
 	PprofPort uint64
 
-	ScriptTimeout uint64
+	ScriptTimeout time.Duration
 	LogFile       string
 }
 

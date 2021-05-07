@@ -288,7 +288,7 @@ func (i *installCmd) installUpdates() error {
 				logger.Error(fmt.Sprintf("PreUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PreUpdate.ps1", err))
 			} else if exist {
 				if _, err := helpers.ExecWithVerify(ps, nil, &config.ScriptTimeout, nil); err != nil {
-					elog.Error(208, fmt.Sprintf("PreUpdateScript: error running script:\n%v", err))
+					logger.Error(fmt.Sprintf("PreUpdateScript: error running script:\n%v", err))
 				}
 			}
 			installingMinOneUpdate = true
@@ -344,7 +344,7 @@ func (i *installCmd) installUpdates() error {
 			logger.Error(fmt.Sprintf("PostUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PostUpdate.ps1", err))
 		} else if exist {
 			if _, err := helpers.ExecWithVerify(ps, nil, &config.ScriptTimeout, nil); err != nil {
-				elog.Error(308, fmt.Sprintf("PostUpdateScript: error executing script:\n%v", err))
+				logger.Error(fmt.Sprintf("PostUpdateScript: error executing script:\n%v", err))
 			}
 		}
 	}
