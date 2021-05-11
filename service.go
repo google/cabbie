@@ -22,10 +22,10 @@ import (
 
 	"flag"
 	"github.com/google/cabbie/cablib"
-	"golang.org/x/sys/windows/svc/eventlog"
-	"golang.org/x/sys/windows/svc/mgr"
-	"golang.org/x/sys/windows/svc"
+	"github.com/google/logger"
 	"github.com/google/subcommands"
+	"golang.org/x/sys/windows/svc"
+	"golang.org/x/sys/windows/svc/mgr"
 )
 
 // Available flags.
@@ -55,20 +55,20 @@ func (c serviceCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	if c.install {
 		if err := installService(cablib.SvcName, cablib.SvcName+" Update Manager"); err != nil {
 			msg := fmt.Sprintf("Failed to install service: %v\n", err)
-			elog.Error(101, msg)
+			logger.Error(msg)
 			fmt.Println(msg)
 			rc = subcommands.ExitFailure
 		}
-		elog.Info(001, "Successfully installed Cabbie service.")
+		logger.Info("Successfully installed Cabbie service.")
 	}
 	if c.uninstall {
 		if err := removeService(cablib.SvcName); err != nil {
 			msg := fmt.Sprintf("Failed to uninstall service: %v\n", err)
-			elog.Error(102, msg)
+			logger.Error(msg)
 			fmt.Println(msg)
 			rc = subcommands.ExitFailure
 		}
-		elog.Info(001, "Successfully uninstalled Cabbie service.")
+		logger.Info("Successfully uninstalled Cabbie service.")
 	}
 
 	if !(c.install || c.uninstall) {
@@ -100,19 +100,13 @@ func installService(name, desc string) error {
 	s, err := m.OpenService(name)
 	if err == nil {
 		msg := fmt.Sprintf("service %q already exists. Updating service config and ensuring service is running...\n", name)
-		elog.Info(002, msg)
+		logger.Info(msg)
 		fmt.Println(msg)
 		s.UpdateConfig(config)
 	} else {
 		s, err = m.CreateService(name, exepath, config)
 		if err != nil {
 			return err
-		}
-
-		if err = eventlog.InstallAsEventCreate(cablib.LogSrcName, eventlog.Error|eventlog.Warning|eventlog.Info); err != nil {
-			msg := fmt.Sprintf("event log source creation failed: %+v", err)
-			elog.Error(102, msg)
-			fmt.Println(msg)
 		}
 
 	}
@@ -135,7 +129,7 @@ func installService(name, desc string) error {
 	}
 	if err := s.SetRecoveryActions(ra, 60); err != nil {
 		msg := fmt.Sprintf("Failed to set service recovery actions:\n%v", err)
-		elog.Error(103, msg)
+		logger.Error(msg)
 		fmt.Println(msg)
 	}
 
@@ -161,7 +155,7 @@ func removeService(name string) error {
 	s, err := m.OpenService(name)
 	if err != nil {
 		msg := fmt.Sprintf("service %q is not installed.", name)
-		elog.Info(002, msg)
+		logger.Info(msg)
 		fmt.Println(msg)
 		return nil
 	}
@@ -173,12 +167,8 @@ func removeService(name string) error {
 	_, err = s.Control(svc.Stop)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to stop service:\n%v", err)
-		elog.Error(104, msg)
+		logger.Error(msg)
 		fmt.Println(msg)
-	}
-
-	if err = eventlog.Remove(name); err != nil {
-		return fmt.Errorf("event log removal failed: %s", err)
 	}
 	return nil
 }
