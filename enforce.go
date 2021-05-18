@@ -21,6 +21,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -38,6 +39,12 @@ type enforcement struct {
 	Required []string `json:"required"`
 }
 
+var (
+	errFileType    = errors.New("file is not json")
+	errInvalidFile = errors.New("file path is invalid")
+	errParsing     = errors.New("could not parse file content")
+)
+
 func enforcements(path string) (enforcement, error) {
 	path = filepath.Clean(path)
 	// Enforcement files must live in Cabbie's directory. If given a relative path,
@@ -46,22 +53,22 @@ func enforcements(path string) (enforcement, error) {
 		path = filepath.Join(enforceDir, path)
 	}
 	if filepath.Ext(path) != ".json" {
-		return enforcement{}, fmt.Errorf("getEnforcement: file %q is not json", path)
+		return enforcement{}, fmt.Errorf("%w: %q", errFileType, path)
 	}
 	b, err := helpers.PathExists(path)
 	if err != nil {
-		return enforcement{}, fmt.Errorf("getEnforcement: error determining %q existence: %v", path, err)
+		return enforcement{}, fmt.Errorf("error determining %q existence: %v", path, err)
 	}
 	if !b {
-		return enforcement{}, fmt.Errorf("getEnforcement: %q doesn't exist", path)
+		return enforcement{}, fmt.Errorf("%w: %q", errInvalidFile, path)
 	}
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
-		return enforcement{}, fmt.Errorf("getEnforcement: error reading file %q: %v", path, err)
+		return enforcement{}, fmt.Errorf("error reading file %q: %v", path, err)
 	}
 	var e enforcement
 	if err := json.Unmarshal(data, &e); err != nil {
-		return enforcement{}, fmt.Errorf("getEnforcement: error unmarshalling enforcement %q: %v", path, err)
+		return enforcement{}, fmt.Errorf("%w for %q: %v", errParsing, path, err)
 	}
 	return e, nil
 }
