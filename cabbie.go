@@ -268,15 +268,21 @@ func enforce() error {
 	if err := enforcedUpdateCount.Set(int64(len(kbs.Required))); err != nil {
 		elog.Error(6, fmt.Sprintf("Error posting metric:\n%v", err))
 	}
-	if len(kbs.Required) == 0 {
-		elog.Info(0002, "No enforced updates defined.")
-		return nil
+	var failures error
+	if len(kbs.Required) > 0 {
+		i := installCmd{kbs: strings.Join(kbs.Required, ",")}
+		if err := i.installUpdates(); err != nil {
+			failures = fmt.Errorf("error enforcing required updates: %v", err)
+			elog.Error(6, failures.Error())
+		}
 	}
-	i := installCmd{kbs: strings.Join(kbs.Required, ",")}
-	if err := i.installUpdates(); err != nil {
-		return fmt.Errorf("error enforcing required updates: %v", err)
+	if len(kbs.Hidden) > 0 {
+		if err := hide(NewKBSetFromSlice(kbs.Hidden)); err != nil {
+			failures = fmt.Errorf("error hiding updates: %v", err)
+			elog.Error(6, failures.Error())
+		}
 	}
-	return nil
+	return failures
 }
 
 func runMainLoop() error {
@@ -421,11 +427,11 @@ func runMainLoop() error {
 		case file := <-enforcedFile:
 			elog.Info(0002, fmt.Sprintf("Enforcement triggered by change in file %q.", file))
 			if err := enforce(); err != nil {
-				elog.Error(6, fmt.Sprintf("Error enforcing required updates:\n%v", err))
+				elog.Error(6, fmt.Sprintf("Error enforcing one or more updates:\n%v", err))
 			}
 		case <-t.Enforcement.C:
 			if err := enforce(); err != nil {
-				elog.Error(6, fmt.Sprintf("Error enforcing required updates:\n%v", err))
+				elog.Error(6, fmt.Sprintf("Error enforcing one or more updates:\n%v", err))
 			}
 		case <-rebootEvent:
 			go func() {

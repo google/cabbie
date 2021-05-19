@@ -28,7 +28,11 @@ type KBSet struct {
 
 // NewKBSet creates a new KBSet given a comma-separated list of KB article IDs
 func NewKBSet(kbList string) KBSet {
-	kbSlice := helpers.StringToSlice(kbList)
+	return NewKBSetFromSlice(helpers.StringToSlice(kbList))
+}
+
+// NewKBSetFromSlice creates a new KBSet given a slice of KB article IDs
+func NewKBSetFromSlice(kbSlice []string) KBSet {
 	kbMap := make(map[string]bool)
 	for _, kb := range kbSlice {
 		kb = strings.ReplaceAll(strings.ToLower(kb), "kb", "")

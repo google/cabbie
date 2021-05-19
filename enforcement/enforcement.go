@@ -14,8 +14,6 @@
 
 // +build windows
 
-// TODO: Add support for hidden KBs
-
 // Package enforcement implements filesystem watching for configured required updates.
 package enforcement
 
@@ -47,6 +45,7 @@ const enforceDir = `C:\ProgramData\Cabbie`
 // Enforcements track any externally configured update enforcements.
 type Enforcements struct {
 	Required []string `json:"required"`
+	Hidden   []string `json:"hidden"`
 }
 
 func enforcements(path string) (Enforcements, error) {
