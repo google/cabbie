@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,8 +36,8 @@ import (
 
 // Available flags
 type installCmd struct {
-	drivers, deadlineOnly, Interactive, virusDef bool
-	kbs                                          string
+	all, drivers, deadlineOnly, Interactive, virusDef bool
+	kbs                                               string
 }
 
 type installRsp struct {
@@ -48,21 +49,39 @@ type installRsp struct {
 func (installCmd) Name() string     { return "install" }
 func (installCmd) Synopsis() string { return "Install selected available updates." }
 func (installCmd) Usage() string {
-	return fmt.Sprintf("%s install [--drivers | --virusDef | --kbs=\"<KBNumber>\"]\n", filepath.Base(os.Args[0]))
+	return fmt.Sprintf("%s install [--drivers | --virusDef | --kbs=\"<KBNumber>\" | --all]\n", filepath.Base(os.Args[0]))
 }
 
 func (i *installCmd) SetFlags(f *flag.FlagSet) {
+	// Category Flags
+	f.BoolVar(&i.all, "all", false, "Install everything.")
 	f.BoolVar(&i.drivers, "drivers", false, "Install available drivers.")
 	f.BoolVar(&i.virusDef, "virus_def", false, "Update virus definitions.")
-	f.BoolVar(&i.deadlineOnly, "deadlineOnly", false, fmt.Sprintf("Install available updates older than %d days", config.Deadline))
 	f.StringVar(&i.kbs, "kbs", "", "Comma separated string of KB numbers in the form of 1234567.")
+
+	// Behavior Flags
+	f.BoolVar(&i.deadlineOnly, "deadlineOnly", false, fmt.Sprintf("Install available updates older than %d days", config.Deadline))
+}
+
+var errInvalidFlags = errors.New("invalid flag combination")
+
+func vetFlags(i installCmd) error {
+	f := 0
+	for _, v := range []bool{i.all, i.drivers, i.virusDef, len(i.kbs) > 0} {
+		if v {
+			f++
+		}
+	}
+	if f > 1 {
+		fmt.Println("Multiple install flags can not be passed at the same time.")
+		fmt.Printf("%s\nUsage: %s\n", i.Synopsis(), i.Usage())
+		return errInvalidFlags
+	}
+	return nil
 }
 
 func (i installCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
-	// TODO: Fix logic to allow only 0 to 1 flags at a time.
-	if i.drivers && i.virusDef && i.kbs != "" {
-		fmt.Println("drivers and virus_def flags can not be passed at the same time.")
-		fmt.Printf("%s\nUsage: %s\n", i.Synopsis(), i.Usage())
+	if err := vetFlags(i); err != nil {
 		return subcommands.ExitUsageError
 	}
 
@@ -88,6 +107,9 @@ func (i *installCmd) criteria() (string, []string) {
 	var c string
 	var rc []string
 	switch {
+	case i.all:
+		c = search.BasicSearch
+		elog.Info(0021, fmt.Sprintf("Starting search for all updates: %s", c))
 	case i.drivers:
 		c = "Type='Driver'"
 		rc = append(rc, "Drivers")
