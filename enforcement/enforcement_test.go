@@ -26,6 +26,38 @@ var (
 	testData = "/testdata"
 )
 
+func TestDedupe(t *testing.T) {
+	tests := []struct {
+		desc string
+		in   Enforcements
+		want Enforcements
+	}{
+		{
+			"no dups",
+			Enforcements{Required: []string{"4018073", "67891011"}},
+			Enforcements{Required: []string{"4018073", "67891011"}},
+		},
+		{
+			"no dups and empty",
+			Enforcements{Required: []string{}},
+			Enforcements{Required: []string{}},
+		},
+		{
+			"with dups",
+			Enforcements{Required: []string{"4018073", "67891011", "4018073", "4018073"}},
+			Enforcements{Required: []string{"4018073", "67891011"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			tt.in.dedupe()
+			if diff := cmp.Diff(tt.in, tt.want); diff != "" {
+				t.Errorf("enforcements(%s) returned unexpected diff (-want +got):\n%s", tt.desc, diff)
+			}
+		})
+	}
+}
+
 func TestEnforcements(t *testing.T) {
 	tests := []struct {
 		in      string
