@@ -30,6 +30,7 @@ import (
 	"github.com/google/cabbie/metrics"
 	"github.com/google/cabbie/notification"
 	"github.com/google/cabbie/cablib"
+	"github.com/google/cabbie/enforcement"
 	"github.com/google/cabbie/servicemgr"
 	"github.com/google/aukera/client"
 	"github.com/scjalliance/comshim"
@@ -257,7 +258,25 @@ func setRebootMetric() {
 	if rbr {
 		rebootEvent <- rbr
 	}
+}
 
+func enforce() error {
+	kbs, err := enforcement.Get()
+	if err != nil {
+		return fmt.Errorf("error retrieving required updates: %v", err)
+	}
+	if err := enforcedUpdateCount.Set(int64(len(kbs.Required))); err != nil {
+		elog.Error(6, fmt.Sprintf("Error posting metric:\n%v", err))
+	}
+	if len(kbs.Required) == 0 {
+		elog.Info(0002, "No enforced updates defined.")
+		return nil
+	}
+	i := installCmd{kbs: strings.Join(kbs.Required, ",")}
+	if err := i.installUpdates(); err != nil {
+		return fmt.Errorf("error enforcing required updates: %v", err)
+	}
+	return nil
 }
 
 func runMainLoop() error {
@@ -281,7 +300,7 @@ func runMainLoop() error {
 	var enforcedFile = make(chan string)
 	go func() {
 		for {
-			err := runEnforcementWatcher(enforcedFile)
+			err := enforcement.Watcher(enforcedFile)
 			elog.Error(6, fmt.Sprintf("failed to initialize enforcement config watcher; relying on enforcement schedule: %v", err))
 			if err := enforcementWatcherFailures.Increment(); err != nil {
 				elog.Error(6, fmt.Sprintf("unable to increment enforcementWatcherFailures metric: %v", err))
@@ -400,19 +419,12 @@ func runMainLoop() error {
 			}
 			setRebootMetric()
 		case file := <-enforcedFile:
-			kbs, err := allEnforcements()
-			if err != nil {
-				elog.Error(6, fmt.Sprintf("Error retrieving required updates from %q:\n%v", file, err))
-			}
-			if err := kbs.install(); err != nil {
+			elog.Info(0002, fmt.Sprintf("Enforcement triggered by change in file %q.", file))
+			if err := enforce(); err != nil {
 				elog.Error(6, fmt.Sprintf("Error enforcing required updates:\n%v", err))
 			}
 		case <-t.Enforcement.C:
-			kbs, err := allEnforcements()
-			if err != nil {
-				elog.Error(6, fmt.Sprintf("Error gathering required updates:\n%v", err))
-			}
-			if err := kbs.install(); err != nil {
+			if err := enforce(); err != nil {
 				elog.Error(6, fmt.Sprintf("Error enforcing required updates:\n%v", err))
 			}
 		case <-rebootEvent:

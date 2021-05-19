@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package enforcement
 
 import (
 	"errors"
@@ -23,29 +23,29 @@ import (
 )
 
 var (
-	testData = "testdata/"
+	testData = "/testdata"
 )
 
 func TestEnforcements(t *testing.T) {
 	tests := []struct {
 		in      string
-		want    enforcement
+		want    Enforcements
 		wantErr error
 	}{
 		{"required.json",
-			enforcement{Required: []string{"4018073", "67891011"}},
+			Enforcements{Required: []string{"4018073", "67891011"}},
 			nil,
 		},
 		{"invalid.json",
-			enforcement{},
+			Enforcements{},
 			errParsing,
 		},
 		{"missing.json",
-			enforcement{},
+			Enforcements{},
 			errInvalidFile,
 		},
 		{"wrong-filetype.txt",
-			enforcement{},
+			Enforcements{},
 			errFileType,
 		},
 	}
