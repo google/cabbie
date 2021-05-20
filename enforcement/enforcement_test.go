@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	testData = "/testdata"
+	testData = "testdata/"
 )
 
 func TestDedupe(t *testing.T) {
