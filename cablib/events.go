@@ -38,6 +38,20 @@ const (
 	EvtServiceStopped
 	// EvtEnforcementChange indicates that cabbie has detected a change in one or more enforcement files.
 	EvtEnforcementChange
+	// EvtDownload indicates that cabbie is downloading updates.
+	EvtDownload
+	// EvtInstall indicates that cabbie is installing updates.
+	EvtInstall
+	// EvtInstallSuccess indicates that cabbie successfully installed updates.
+	EvtInstallSuccess
+	// EvtSearch indicates that cabbie is searching for updates.
+	EvtSearch
+	// EvtRebootRequired indicates that the system is in need of a reboot.
+	EvtRebootRequired
+	// EvtUpdateSkip indicates that the cabbie is skipping detected updates.
+	EvtUpdateSkip
+	// EvtMisc indicates that an uncategorized internal event.
+	EvtMisc
 
 	/*
 	 * Errors
@@ -53,4 +67,12 @@ const (
 	EvtErrQueryFailure
 	// EvtErrMaintWindow indicates a problem with maintenance window configuration.
 	EvtErrMaintWindow
+	// EvtErrUpdateScript indicates a problem with the pre/post update scripts.
+	EvtErrUpdateScript
+	// EvtErrDownloadFailure indicates that cabbie had a problem downloading updates.
+	EvtErrDownloadFailure
+	// EvtErrPowerMgmt indicates that cabbie had a problem managing device power state / rebooting.
+	EvtErrPowerMgmt
+	// EvtErrMisc indicates a miscellaneous internal error condition.
+	EvtErrMisc
 )
