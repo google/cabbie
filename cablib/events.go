@@ -50,6 +50,14 @@ const (
 	EvtRebootRequired
 	// EvtUpdateSkip indicates that the cabbie is skipping detected updates.
 	EvtUpdateSkip
+	// EvtHistory indicates that cabbie is performing a history query.
+	EvtHistory
+	// EvtHide indicates that cabbie is attempting to hide updates.
+	EvtHide
+	// EvtList indicates that cabbie is performing an update list query.
+	EvtList
+	// EvtUnhide indicates that cabbie is attempting to unhide updates.
+	EvtUnhide
 	// EvtMisc indicates that an uncategorized internal event.
 	EvtMisc
 
@@ -73,6 +81,12 @@ const (
 	EvtErrDownloadFailure
 	// EvtErrPowerMgmt indicates that cabbie had a problem managing device power state / rebooting.
 	EvtErrPowerMgmt
+	// EvtErrHistory indicates that cabbie had a problem querying update history.
+	EvtErrHistory
+	// EvtErrHide indicates that cabbie had a problem hiding updates.
+	EvtErrHide
+	// EvtErrUnhide indicates that cabbie had a problem unhiding updates
+	EvtErrUnhide
 	// EvtErrMisc indicates a miscellaneous internal error condition.
 	EvtErrMisc
 )
