@@ -87,6 +87,12 @@ const (
 	EvtErrHide
 	// EvtErrUnhide indicates that cabbie had a problem unhiding updates
 	EvtErrUnhide
+	// EvtErrService indicates a problem with the Cabbie system service
+	EvtErrService
+	// EvtErrConfig indicates a problem with Cabbie configuration
+	EvtErrConfig
+	// EvtErrEnforcement indicates a problem with Cabbie's enforcement files
+	EvtErrEnforcement
 	// EvtErrMisc indicates a miscellaneous internal error condition.
 	EvtErrMisc
 )
