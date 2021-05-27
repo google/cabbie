@@ -55,20 +55,20 @@ func (c serviceCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	if c.install {
 		if err := installService(cablib.SvcName, cablib.SvcName+" Update Manager"); err != nil {
 			msg := fmt.Sprintf("Failed to install service: %v\n", err)
-			elog.Error(101, msg)
+			elog.Error(cablib.EvtErrSvcInstall, msg)
 			fmt.Println(msg)
 			rc = subcommands.ExitFailure
 		}
-		elog.Info(001, "Successfully installed Cabbie service.")
+		elog.Info(cablib.EvtSvcInstall, "Successfully installed Cabbie service.")
 	}
 	if c.uninstall {
 		if err := removeService(cablib.SvcName); err != nil {
 			msg := fmt.Sprintf("Failed to uninstall service: %v\n", err)
-			elog.Error(102, msg)
+			elog.Error(cablib.EvtErrSvcInstall, msg)
 			fmt.Println(msg)
 			rc = subcommands.ExitFailure
 		}
-		elog.Info(001, "Successfully uninstalled Cabbie service.")
+		elog.Info(cablib.EvtSvcInstall, "Successfully uninstalled Cabbie service.")
 	}
 
 	if !(c.install || c.uninstall) {
@@ -100,7 +100,7 @@ func installService(name, desc string) error {
 	s, err := m.OpenService(name)
 	if err == nil {
 		msg := fmt.Sprintf("service %q already exists. Updating service config and ensuring service is running...\n", name)
-		elog.Info(002, msg)
+		elog.Info(cablib.EvtSvcInstall, msg)
 		fmt.Println(msg)
 		s.UpdateConfig(config)
 	} else {
@@ -111,7 +111,7 @@ func installService(name, desc string) error {
 
 		if err = eventlog.InstallAsEventCreate(cablib.LogSrcName, eventlog.Error|eventlog.Warning|eventlog.Info); err != nil {
 			msg := fmt.Sprintf("event log source creation failed: %+v", err)
-			elog.Error(102, msg)
+			elog.Error(cablib.EvtErrSvcInstall, msg)
 			fmt.Println(msg)
 		}
 
@@ -135,7 +135,7 @@ func installService(name, desc string) error {
 	}
 	if err := s.SetRecoveryActions(ra, 60); err != nil {
 		msg := fmt.Sprintf("Failed to set service recovery actions:\n%v", err)
-		elog.Error(103, msg)
+		elog.Error(cablib.EvtErrSvcInstall, msg)
 		fmt.Println(msg)
 	}
 
@@ -161,7 +161,7 @@ func removeService(name string) error {
 	s, err := m.OpenService(name)
 	if err != nil {
 		msg := fmt.Sprintf("service %q is not installed.", name)
-		elog.Info(002, msg)
+		elog.Info(cablib.EvtSvcInstall, msg)
 		fmt.Println(msg)
 		return nil
 	}
@@ -173,7 +173,7 @@ func removeService(name string) error {
 	_, err = s.Control(svc.Stop)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to stop service:\n%v", err)
-		elog.Error(104, msg)
+		elog.Error(cablib.EvtErrService, msg)
 		fmt.Println(msg)
 	}
 

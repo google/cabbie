@@ -58,6 +58,8 @@ const (
 	EvtList
 	// EvtUnhide indicates that cabbie is attempting to unhide updates.
 	EvtUnhide
+	// EvtSvcInstall events relate to cabbie service (un)installation
+	EvtSvcInstall
 	// EvtMisc indicates that an uncategorized internal event.
 	EvtMisc
 
@@ -93,6 +95,8 @@ const (
 	EvtErrConfig
 	// EvtErrEnforcement indicates a problem with Cabbie's enforcement files
 	EvtErrEnforcement
+	// EvtErrSvcInstall indicates a problem during service (un)installation
+	EvtErrSvcInstall
 	// EvtErrMisc indicates a miscellaneous internal error condition.
 	EvtErrMisc
 )

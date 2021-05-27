@@ -82,7 +82,7 @@ func Get() (Enforcements, error) {
 		p := filepath.Join(enforceDir, f.Name())
 		kbs, err := enforcements(p)
 		if err != nil {
-			elog.Error(6, fmt.Sprintf("Error getting updates from %q:\n%v", p, err))
+			elog.Error(cablib.EvtErrEnforcement, fmt.Sprintf("Error getting updates from %q:\n%v", p, err))
 			continue
 		}
 		e.Required = append(e.Required, kbs.Required...)
