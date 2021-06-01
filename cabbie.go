@@ -18,7 +18,7 @@
 package main
 
 import (
-	"context"
+	"golang.org/x/net/context"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"

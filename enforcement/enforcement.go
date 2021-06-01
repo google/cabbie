@@ -27,7 +27,7 @@ import (
 
 	"github.com/google/cabbie/cablib"
 
-	"gopkg.in/fsnotify/fsnotify.v1"
+	"gopkg.in/fsnotify.v1"
 	"golang.org/x/sys/windows/svc/debug"
 	"github.com/google/glazier/go/helpers"
 )

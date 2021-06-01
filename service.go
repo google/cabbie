@@ -14,7 +14,7 @@
 package main
 
 import (
-	"context"
+	"golang.org/x/net/context"
 	"fmt"
 	"os"
 	"path/filepath"
