@@ -14,18 +14,18 @@
 
 package cablib
 
+/*
+ * System Events
+ */
 const (
-	/*
-	 * System Events
-	 */
-
 	// EvtReboot indicates a reboot of the local system.
 	EvtReboot = iota + 1000
+)
 
-	/*
-	 * Internal Events
-	 */
-
+/*
+ * Internal Events
+ */
+const (
 	// EvtUpdatesFound indicates that applicable updates were detected.
 	EvtUpdatesFound = iota + 2000
 	// EvtNoUpdates indicates that no applicable updates were detected.
@@ -62,11 +62,12 @@ const (
 	EvtSvcInstall
 	// EvtMisc indicates that an uncategorized internal event.
 	EvtMisc
+)
 
-	/*
-	 * Errors
-	 */
-
+/*
+ * Errors
+ */
+const (
 	// EvtErrMetricReport indicates a problem reporting metric data.
 	EvtErrMetricReport = iota + 4000
 	// EvtErrNotifications indicates a problem displaying notifications.
