@@ -66,7 +66,7 @@ func (c hideCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interface{
 	return subcommands.ExitSuccess
 }
 
-// TODO: Turn into shared function that can be used by multiple actions
+// TODO(cjgenevi): Turn into shared function that can be used by multiple actions
 func findUpdates(criteria string) (*updatecollection.Collection, error) {
 	// Start Windows update session
 	s, err := session.New()
