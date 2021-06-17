@@ -38,9 +38,9 @@ var (
 	errFileType    = errors.New("file is not json")
 	errInvalidFile = errors.New("file path is invalid")
 	errParsing     = errors.New("could not parse file content")
-)
 
-const enforceDir = `C:\ProgramData\Cabbie`
+	enforceDir = filepath.Join(os.Getenv("ProgramData"), `\Cabbie`)
+)
 
 // Enforcements track any externally configured update enforcements.
 type Enforcements struct {
