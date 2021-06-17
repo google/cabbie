@@ -28,8 +28,6 @@ import (
 )
 
 const (
-	// S_FALSE is returned by CoInitializeEx if it was already called on this thread.
-	S_FALSE = 0x00000001
 	// S_OK is the return HResult for successful method calls.
 	S_OK = 0x00000000
 	// LogSrcName is the name of event log source.
