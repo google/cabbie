@@ -16,6 +16,7 @@ package enforcement
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -23,7 +24,7 @@ import (
 )
 
 var (
-	testData = "testdata/"
+	testData = filepath.Join(os.Getenv("TEST_SRCDIR"), "testdata/")
 )
 
 func TestDedupe(t *testing.T) {
