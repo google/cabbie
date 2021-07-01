@@ -202,6 +202,7 @@ func (i *installCmd) installUpdates() error {
 		if rebootRequired {
 			if i.Interactive {
 				fmt.Println("Host has existing updates pending reboot.")
+				rebootEvent <- rebootRequired
 				return nil
 			}
 			t, err := cablib.RebootTime()
@@ -373,6 +374,7 @@ func (i *installCmd) installUpdates() error {
 	if rebootRequired {
 		if i.Interactive {
 			fmt.Println("Updates have been installed, please reboot to complete the installation...")
+			rebootEvent <- rebootRequired
 			return nil
 		}
 		rebootMessage(int(config.RebootDelay))
