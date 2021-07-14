@@ -17,22 +17,23 @@ package metrics
 
 import "sync"
 
-type metricData struct {
+// MetricData stores metric information.
+type MetricData struct {
 	name    string
 	service string
 }
 
 // Bool implements a Bool-type metric.
 type Bool struct {
-	value bool
+	Value bool
 	mu    sync.Mutex
-	data  *metricData
+	Data  *MetricData
 }
 
 // NewBool sets the metric to a new Bool value.
 func NewBool(name, service string) (*Bool, error) {
 	return &Bool{
-		data: &metricData{
+		Data: &MetricData{
 			name:    name,
 			service: service,
 		},
@@ -44,21 +45,21 @@ func (b *Bool) Set(value bool) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.value = value
+	b.Value = value
 	return nil
 }
 
 // Int implements a Int-type metric.
 type Int struct {
-	value int64
+	Value int64
 	mu    sync.Mutex
-	data  *metricData
+	Data  *MetricData
 }
 
 // NewInt sets the metric to a new Int value.
 func NewInt(name, service string) (*Int, error) {
 	return &Int{
-		data: &metricData{
+		Data: &MetricData{
 			name:    name,
 			service: service,
 		},
@@ -70,14 +71,14 @@ func (i *Int) Set(value int64) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	i.value = value
+	i.Value = value
 	return nil
 }
 
 // NewCounter sets the metric to a new Int value.
 func NewCounter(name, service string) (*Int, error) {
 	return &Int{
-		data: &metricData{
+		Data: &MetricData{
 			name:    name,
 			service: service,
 		},
@@ -89,21 +90,21 @@ func (i *Int) Increment() error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	i.value++
+	i.Value++
 	return nil
 }
 
 // String implements a String-type metric.
 type String struct {
-	value string
+	Value string
 	mu    sync.Mutex
-	data  *metricData
+	Data  *MetricData
 }
 
 // NewString sets the metric to a new string value.
 func NewString(name, service string) (*String, error) {
 	return &String{
-		data: &metricData{
+		Data: &MetricData{
 			name:    name,
 			service: service,
 		},
@@ -115,6 +116,6 @@ func (s *String) Set(value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.value = value
+	s.Value = value
 	return nil
 }
