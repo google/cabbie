@@ -19,8 +19,18 @@ import "sync"
 
 // MetricData stores metric information.
 type MetricData struct {
-	name    string
+	Name    string
 	service string
+	mu      sync.Mutex
+	Fields  map[string]interface{}
+}
+
+// AddStringField adds a string field to a metric.
+func (m *MetricData) AddStringField(name, value string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Fields[name] = value
 }
 
 // Bool implements a Bool-type metric.
@@ -34,7 +44,7 @@ type Bool struct {
 func NewBool(name, service string) (*Bool, error) {
 	return &Bool{
 		Data: &MetricData{
-			name:    name,
+			Name:    name,
 			service: service,
 		},
 	}, nil
@@ -60,7 +70,7 @@ type Int struct {
 func NewInt(name, service string) (*Int, error) {
 	return &Int{
 		Data: &MetricData{
-			name:    name,
+			Name:    name,
 			service: service,
 		},
 	}, nil
@@ -79,7 +89,7 @@ func (i *Int) Set(value int64) error {
 func NewCounter(name, service string) (*Int, error) {
 	return &Int{
 		Data: &MetricData{
-			name:    name,
+			Name:    name,
 			service: service,
 		},
 	}, nil
@@ -105,7 +115,7 @@ type String struct {
 func NewString(name, service string) (*String, error) {
 	return &String{
 		Data: &MetricData{
-			name:    name,
+			Name:    name,
 			service: service,
 		},
 	}, nil
