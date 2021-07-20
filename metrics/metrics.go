@@ -25,11 +25,25 @@ type MetricData struct {
 	Fields  map[string]interface{}
 }
 
+// AddBoolField adds a bool field to a metric.
+func (m *MetricData) AddBoolField(name string, value bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Fields == nil {
+		m.Fields = make(map[string]interface{})
+	}
+	m.Fields[name] = value
+}
+
 // AddStringField adds a string field to a metric.
 func (m *MetricData) AddStringField(name, value string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.Fields == nil {
+		m.Fields = make(map[string]interface{})
+	}
 	m.Fields[name] = value
 }
 
