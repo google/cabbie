@@ -16,6 +16,7 @@
 package install
 
 import (
+	goerr "errors"
 	"fmt"
 
 	"github.com/google/cabbie/errors"
@@ -23,6 +24,11 @@ import (
 	"github.com/google/cabbie/updatecollection"
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
+)
+
+var (
+	// ErrBusy indicates that the Windows installer is busy
+	ErrBusy = goerr.New("an installation or uninstallation is already in progress")
 )
 
 // Installer represents an update Install interface.
@@ -48,6 +54,10 @@ func NewInstaller(us *session.UpdateSession, uc *updatecollection.Collection) (*
 
 // Install will install the requested updates.
 func (i *Installer) Install() error {
+	b, _ := i.IsBusy()
+	if b {
+		return ErrBusy
+	}
 	r, err := oleutil.CallMethod(i.IUpdateInstaller, "Install")
 	i.IInstallationResult = r.ToIDispatch()
 	if err != nil {
