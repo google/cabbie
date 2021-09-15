@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build windows
 // +build windows
 
 // The cabbie binary is used to manage and report Windows updates.
@@ -517,7 +518,6 @@ func enableThirdPartyUpdates() error {
 }
 
 func main() {
-	flag.Parse()
 	var err error
 
 	if *runInDebug {
