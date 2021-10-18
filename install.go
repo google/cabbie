@@ -132,7 +132,7 @@ func (i *installCmd) criteria() (string, []string) {
 func installingMessage() {
 	elog.Info(cablib.EvtInstall, "Cabbie is installing new updates.")
 
-	if err := notification.NewNotification(cablib.SvcName, notification.NewInstallingMessage(), "installingUpdates"); err != nil {
+	if err := notification.NewInstallingMessage().Push(); err != nil {
 		elog.Error(cablib.EvtErrNotifications, fmt.Sprintf("Failed to create notification:\n%v", err))
 	}
 }
@@ -140,7 +140,7 @@ func installingMessage() {
 func rebootMessage(seconds int) {
 	elog.Info(cablib.EvtInstallSuccess, "Updates have been installed, please reboot to complete the installation...")
 
-	if err := notification.NewNotification(cablib.SvcName, notification.NewRebootMessage(seconds), "rebootPending"); err != nil {
+	if err := notification.NewRebootMessage(seconds).Push(); err != nil {
 		elog.Error(cablib.EvtErrNotifications, fmt.Sprintf("Failed to create notification:\n%v", err))
 	}
 }

@@ -128,7 +128,7 @@ func cleanRebootValue() error {
 func SystemReboot(t time.Time) error {
 	time.Sleep(time.Until(t))
 
-	notification.NewNotification(SvcName, notification.RebootPopup(2), "rebootPending")
+	notification.RebootPopup(2).Push()
 
 	time.Sleep(2 * time.Minute)
 

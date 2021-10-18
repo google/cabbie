@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build windows
 // +build windows
 
 // The cabbie binary is used to manage and report Windows updates.
@@ -397,7 +398,7 @@ func runMainLoop() error {
 			)
 
 			if config.NotifyAvailable == 1 {
-				if err := notification.NewNotification(cablib.SvcName, notification.NewAvailableUpdateMessage(), "availableUpdates"); err != nil {
+				if err := notification.NewAvailableUpdateMessage().Push(); err != nil {
 					elog.Error(cablib.EvtErrNotifications, fmt.Sprintf("Failed to create notification:\n%v", err))
 				}
 			}
