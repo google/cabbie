@@ -1,6 +1,6 @@
 # Cabbie
 
-[![Go Tests](https://github.com/google/cabbie/workflows/Go%20Tests/badge.svg)](https://github.com/google/cabbie/actions?query=workflow%3A%22Go+Tests%22)
+[![Go Tests](https://github.com/google/cabbie/workflows/Go%20Tests/badge.svg)](https://github.com/google/cabbie/actions?query=workflow%3A%22Go+Tests%22) [![release](https://github.com/google/fresnel/actions/workflows/release.yml/badge.svg)](https://github.com/google/fresnel/actions/workflows/release.yml)
 
 ## Overview
 
@@ -15,9 +15,13 @@ Similarly, `cabbie flags` will show available flags.
 
 ## Getting Started
 
-Download the repository and run `go build C:\Path\to\cabbie\src`
+Pre-compiled binaries are available as [releases assets][https://github.com/google/cabbie/releases].
 
-Install any missing imports with `go get <URL>`
+Building Cabbie manually:
+
+1. Clone the repository
+1. Install any missing imports with `go get -u`
+1. Run `go build C:\Path\to\cabbie\src`
 
 ## Configuration Options
 
