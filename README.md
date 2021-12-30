@@ -15,7 +15,7 @@ Similarly, `cabbie flags` will show available flags.
 
 ## Getting Started
 
-Pre-compiled binaries are available as [releases assets][https://github.com/google/cabbie/releases].
+Pre-compiled binaries are available as [release assets](https://github.com/google/cabbie/releases).
 
 Building Cabbie manually:
 
