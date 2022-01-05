@@ -522,7 +522,6 @@ func enableThirdPartyUpdates() error {
 
 func main() {
 	flag.Parse()
-
 	var err error
 	elog, err = logger.NewLogger(*runInDebug)
 	if err != nil {
