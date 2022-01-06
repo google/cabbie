@@ -47,7 +47,7 @@ import (
 var (
 	elog             debug.Log
 	runInDebug       = flag.Bool("debug", false, "Run in debug mode")
-	stdout           = flag.Bool("stdout", false, "Print to stdout")
+	showOutput       = flag.Bool("showOutput", false, "Print logs to stdout")
 	config           = new(Settings)
 	categoryDefaults = []string{"Critical Updates", "Definition Updates", "Security Updates"}
 	rebootEvent      = make(chan bool, 10)
@@ -523,7 +523,7 @@ func enableThirdPartyUpdates() error {
 func main() {
 	flag.Parse()
 	var err error
-	elog, err = logger.NewLogger(*stdout, *runInDebug)
+	elog, err = logger.NewLogger(*showOutput, *runInDebug)
 	if err != nil {
 		fmt.Println("failed to initialize logger")
 		os.Exit(1)

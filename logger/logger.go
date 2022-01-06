@@ -10,11 +10,14 @@ import (
 	"golang.org/x/sys/windows/svc/eventlog"
 )
 
+// cabbieLogger enables logging to both googleLogger.Logger and debug.Log
 type cabbieLogger struct {
 	googLogger googleLogger.Logger
 	elog       debug.Log
 }
 
+// Info logs with the Info severity.
+// msg is handled in the manner of fmt.Print.
 func (log cabbieLogger) Info(eid uint32, msg string) error {
 	if err := log.elog.Info(eid, msg); err != nil {
 		return err
@@ -23,6 +26,7 @@ func (log cabbieLogger) Info(eid uint32, msg string) error {
 	return nil
 }
 
+// Close closes log.elog and log.googLogger
 func (log cabbieLogger) Close() error {
 	if err := log.elog.Close(); err != nil {
 		return err
@@ -31,6 +35,8 @@ func (log cabbieLogger) Close() error {
 	return nil
 }
 
+// Warning logs with the Warning severity.
+// msg is handled in the manner of fmt.Print.
 func (log cabbieLogger) Warning(eid uint32, msg string) error {
 	if err := log.elog.Warning(eid, msg); err != nil {
 		return err
@@ -39,6 +45,8 @@ func (log cabbieLogger) Warning(eid uint32, msg string) error {
 	return nil
 }
 
+// Error logs with the Error severity.
+// msg is handled in the manner of fmt.Print.
 func (log cabbieLogger) Error(eid uint32, msg string) error {
 	if err := log.elog.Error(eid, msg); err != nil {
 		return err
@@ -47,7 +55,8 @@ func (log cabbieLogger) Error(eid uint32, msg string) error {
 	return nil
 }
 
-func NewLogger(stdout bool, runInDebug bool) (*cabbieLogger, error) {
+// NewLogger returns an initialized cabbieLogger or an error
+func NewLogger(showOutput bool, runInDebug bool) (*cabbieLogger, error) {
 	var err error
 	logger := cabbieLogger{}
 	var debugLog debug.Log
@@ -60,15 +69,9 @@ func NewLogger(stdout bool, runInDebug bool) (*cabbieLogger, error) {
 			return nil, err
 		}
 	}
-	if debugLog == nil {
-		fmt.Println("debugLog is nil")
-	}
 	logger.elog = debugLog
-	if logger.elog == nil {
-		fmt.Println("logger.elog is nil")
-	}
 	// if stdout == true, log to stdout but not eventlog; that's handled in logger.elog
-	gl := googleLogger.Init(cablib.LogSrcName, stdout, false, io.Discard)
+	gl := googleLogger.Init(cablib.LogSrcName, showOutput, false, io.Discard)
 	logger.googLogger = *gl
 	return &logger, nil
 }
