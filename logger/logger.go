@@ -11,6 +11,7 @@ import (
 )
 
 // cabbieLogger enables logging to both googleLogger.Logger and debug.Log
+// cabbieLogger satisfies debug.Log interface
 type cabbieLogger struct {
 	googLogger googleLogger.Logger
 	elog       debug.Log
@@ -56,7 +57,7 @@ func (log cabbieLogger) Error(eid uint32, msg string) error {
 }
 
 // NewLogger returns an initialized cabbieLogger or an error
-func NewLogger(showOutput bool, runInDebug bool) (*cabbieLogger, error) {
+func NewLogger(showOutput bool, runInDebug bool) (debug.Log, error) {
 	var err error
 	logger := cabbieLogger{}
 	var debugLog debug.Log
@@ -69,9 +70,13 @@ func NewLogger(showOutput bool, runInDebug bool) (*cabbieLogger, error) {
 			return nil, err
 		}
 	}
+	if !showOutput {
+		return debugLog, nil
+	}
+
 	logger.elog = debugLog
 	// if stdout == true, log to stdout but not eventlog; that's handled in logger.elog
 	gl := googleLogger.Init(cablib.LogSrcName, showOutput, false, io.Discard)
 	logger.googLogger = *gl
-	return &logger, nil
+	return logger, nil
 }
