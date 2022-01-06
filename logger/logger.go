@@ -10,12 +10,12 @@ import (
 	"golang.org/x/sys/windows/svc/eventlog"
 )
 
-type logImp struct {
+type cabbieLogger struct {
 	googLogger googleLogger.Logger
 	elog       debug.Log
 }
 
-func (log logImp) Info(eid uint32, msg string) error {
+func (log cabbieLogger) Info(eid uint32, msg string) error {
 	if err := log.elog.Info(eid, msg); err != nil {
 		return err
 	}
@@ -23,7 +23,7 @@ func (log logImp) Info(eid uint32, msg string) error {
 	return nil
 }
 
-func (log logImp) Close() error {
+func (log cabbieLogger) Close() error {
 	if err := log.elog.Close(); err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func (log logImp) Close() error {
 	return nil
 }
 
-func (log logImp) Warning(eid uint32, msg string) error {
+func (log cabbieLogger) Warning(eid uint32, msg string) error {
 	if err := log.elog.Warning(eid, msg); err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (log logImp) Warning(eid uint32, msg string) error {
 	return nil
 }
 
-func (log logImp) Error(eid uint32, msg string) error {
+func (log cabbieLogger) Error(eid uint32, msg string) error {
 	if err := log.elog.Error(eid, msg); err != nil {
 		return err
 	}
@@ -47,9 +47,9 @@ func (log logImp) Error(eid uint32, msg string) error {
 	return nil
 }
 
-func NewLogger(runInDebug bool) (*logImp, error) {
+func NewLogger(stdout bool, runInDebug bool) (*cabbieLogger, error) {
 	var err error
-	logger := logImp{}
+	logger := cabbieLogger{}
 	var debugLog debug.Log
 	if runInDebug {
 		debugLog = debug.New(cablib.LogSrcName)
@@ -67,7 +67,8 @@ func NewLogger(runInDebug bool) (*logImp, error) {
 	if logger.elog == nil {
 		fmt.Println("logger.elog is nil")
 	}
-	gl := googleLogger.Init(cablib.LogSrcName, true, false, io.Discard)
+	// if stdout == true, log to stdout but not eventlog; that's handled in logger.elog
+	gl := googleLogger.Init(cablib.LogSrcName, stdout, false, io.Discard)
 	logger.googLogger = *gl
 	return &logger, nil
 }

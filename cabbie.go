@@ -523,7 +523,7 @@ func enableThirdPartyUpdates() error {
 func main() {
 	flag.Parse()
 	var err error
-	elog, err = logger.NewLogger(*runInDebug)
+	elog, err = logger.NewLogger(*stdout, *runInDebug)
 	if err != nil {
 		fmt.Println("failed to initialize logger")
 		os.Exit(1)
