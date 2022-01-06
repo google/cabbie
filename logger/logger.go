@@ -56,7 +56,7 @@ func (log cabbieLogger) Error(eid uint32, msg string) error {
 	return nil
 }
 
-// NewLogger returns an initialized cabbieLogger or an error
+// NewLogger returns an initialized cabbieLogger or normal debug.Log
 func NewLogger(showOutput bool, runInDebug bool) (debug.Log, error) {
 	var err error
 	logger := cabbieLogger{}
