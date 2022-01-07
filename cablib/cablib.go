@@ -19,13 +19,12 @@ import (
 	"fmt"
 	"reflect"
 	"time"
+	"os"
 
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 	"github.com/google/cabbie/notification"
 	"golang.org/x/sys/windows/registry"
-	"github.com/go-ole/go-ole"
-	"github.com/go-ole/go-ole/oleutil"
 	"github.com/google/glazier/go/power"
 )
 
