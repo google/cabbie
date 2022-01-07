@@ -66,6 +66,24 @@ func TestUsage(t *testing.T) {
 	}
 }
 
+func TestVetFlags(t *testing.T) {
+	for _, tt := range []struct {
+		cmd  installCmd
+		want error
+	}{
+		{installCmd{}, nil},
+		{installCmd{drivers: true}, nil},
+		{installCmd{virusDef: true}, nil},
+		{installCmd{kbs: "12345,54321"}, nil},
+		{installCmd{drivers: true, kbs: "12345,54321"}, errInvalidFlags},
+	} {
+		got := vetFlags(tt.cmd)
+		if got != tt.want {
+			t.Errorf("vetFlags(%v): got %t, want %t", tt.cmd, got, tt.want)
+		}
+	}
+}
+
 func TestGetCriteria(t *testing.T) {
 	for _, tt := range []struct {
 		i              installCmd

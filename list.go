@@ -14,7 +14,7 @@
 package main
 
 import (
-	"context"
+	"golang.org/x/net/context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"flag"
+	"github.com/google/cabbie/cablib"
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
 	"github.com/google/subcommands"
@@ -53,7 +54,7 @@ func (c listCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interface{
 	}
 	msg := fmt.Sprintf("Found %d required updates.\nRequired updates:\n%s\nOptional updates:\n%s\n",
 		len(requiredUpdates), strings.Join(requiredUpdates, "\n"), strings.Join(optionalUpdates, "\n"))
-	elog.Info(4, msg)
+	elog.Info(cablib.EvtList, msg)
 	fmt.Print(msg)
 	return rc
 }
@@ -81,7 +82,7 @@ func listUpdates(hidden bool) ([]string, []string, error) {
 	}
 	defer q.Close()
 
-	elog.Info(002, fmt.Sprintf("Using search criteria: %s\n", q.Criteria))
+	elog.Info(cablib.EvtSearch, fmt.Sprintf("Using search criteria: %s\n", q.Criteria))
 	uc, err := q.QueryUpdates()
 	if err != nil {
 		return nil, nil, fmt.Errorf("error encountered when attempting to query for updates: %v", err)

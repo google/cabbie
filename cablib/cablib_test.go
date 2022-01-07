@@ -16,7 +16,6 @@ package cablib
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"testing"
 	"time"
 
@@ -198,24 +197,6 @@ func TestStringInSlice(t *testing.T) {
 		o := StringInSlice(tt.st, tt.sl)
 		if o != tt.out {
 			t.Errorf("got %t, want %t", o, tt.out)
-		}
-	}
-}
-
-func TestStringToSlice(t *testing.T) {
-	for _, tt := range []struct {
-		in  string
-		out []string
-	}{
-		{"abc", []string{"abc"}},
-		{"def, gh ij ,kl-mnop", []string{"def", "gh ij", "kl-mnop"}},
-		{",", []string{"", ""}},
-		{",qrst,", []string{"", "qrst", ""}},
-		{" ", nil},
-	} {
-		o := StringToSlice(tt.in)
-		if !reflect.DeepEqual(o, tt.out) {
-			t.Errorf("got %+q, want %+q", o, tt.out)
 		}
 	}
 }

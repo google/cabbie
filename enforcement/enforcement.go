@@ -14,80 +14,84 @@
 
 // +build windows
 
-// TODO: Add support for hidden KBs
-
-// Enforce implements filesystem watching for configured required updates.
-package main
+// Package enforcement implements filesystem watching for configured required updates.
+package enforcement
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/google/cabbie/cablib"
-	"gopkg.in/fsnotify/fsnotify.v1"
+
+	"gopkg.in/fsnotify.v1"
+	"golang.org/x/sys/windows/svc/debug"
+	"github.com/google/glazier/go/helpers"
 )
 
-const enforceDir = "C:\\ProgramData\\Cabbie"
+var (
+	elog debug.Log
 
-type enforcement struct {
+	errFileType    = errors.New("file is not json")
+	errInvalidFile = errors.New("file path is invalid")
+	errParsing     = errors.New("could not parse file content")
+
+	enforceDir = filepath.Join(os.Getenv("ProgramData"), `\Cabbie`)
+)
+
+// Enforcements track any externally configured update enforcements.
+type Enforcements struct {
 	Required []string `json:"required"`
+	Hidden   []string `json:"hidden"`
 }
 
-func enforcements(path string) (enforcement, error) {
+func enforcements(path string) (Enforcements, error) {
+	var e Enforcements
 	path = filepath.Clean(path)
-	// Enforcement files must live in Cabbie's directory. If given a relative path,
-	// attempt a lookup by joining Cabbie's path and the given string.
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(enforceDir, path)
-	}
 	if filepath.Ext(path) != ".json" {
-		return enforcement{}, fmt.Errorf("getEnforcement: file %q is not json", path)
+		return e, fmt.Errorf("%w: %q", errFileType, path)
 	}
-	b, err := cablib.PathExists(path)
+	b, err := helpers.PathExists(path)
 	if err != nil {
-		return enforcement{}, fmt.Errorf("getEnforcement: error determining %q existence: %v", path, err)
+		return e, fmt.Errorf("error determining %q existence: %v", path, err)
 	}
 	if !b {
-		return enforcement{}, fmt.Errorf("getEnforcement: %q doesn't exist", path)
+		return e, fmt.Errorf("%w: %q", errInvalidFile, path)
 	}
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
-		return enforcement{}, fmt.Errorf("getEnforcement: error reading file %q: %v", path, err)
+		return e, fmt.Errorf("error reading file %q: %v", path, err)
 	}
-	var e enforcement
 	if err := json.Unmarshal(data, &e); err != nil {
-		return enforcement{}, fmt.Errorf("getEnforcement: error unmarshalling enforcement %q: %v", path, err)
+		return e, fmt.Errorf("%w for %q: %v", errParsing, path, err)
 	}
 	return e, nil
 }
 
-func allEnforcements() (enforcement, error) {
+// Get attempts to return all known external enforcements.
+func Get() (Enforcements, error) {
+	var e Enforcements
 	files, err := ioutil.ReadDir(enforceDir)
 	if err != nil {
-		return enforcement{}, err
+		return e, err
 	}
-	var e enforcement
 	for _, f := range files {
 		p := filepath.Join(enforceDir, f.Name())
 		kbs, err := enforcements(p)
 		if err != nil {
-			elog.Error(6, fmt.Sprintf("getAllEnforcements: error getting updates from %q:\n%v", p, err))
+			elog.Error(cablib.EvtErrEnforcement, fmt.Sprintf("Error getting updates from %q:\n%v", p, err))
 			continue
 		}
 		e.Required = append(e.Required, kbs.Required...)
-	}
-	if err := enforcedUpdateCount.Set(int64(len(e.Required))); err != nil {
-		elog.Error(6, fmt.Sprintf("Error posting metric:\n%v", err))
 	}
 	e.dedupe()
 	return e, nil
 }
 
-func (e *enforcement) dedupe() {
+func (e *Enforcements) dedupe() {
 	u := make([]string, 0)
 	m := make(map[string]bool)
 	for _, v := range e.Required {
@@ -100,26 +104,17 @@ func (e *enforcement) dedupe() {
 	e.Required = u
 }
 
-func (e *enforcement) install() error {
-	if len(e.Required) == 0 {
-		elog.Info(0002, "No enforced updates defined.")
-		return nil
-	}
-	i := installCmd{kbs: strings.Join(e.Required, ",")}
-	return i.installUpdates()
-}
-
-// Filesystem watcher for required updates. This is meant to install required updates as soon as they are configured.
+// Watcher runs a filesystem watcher for required updates. This is meant to install required updates as soon as they are configured.
 // All configured required updates are read on a schedule (see cabbie.go t.Enforcement ticker usage) to ensure required
 // updates are installed even if a filesystem event is missed.
-func runEnforcementWatcher(file chan<- string) error {
+func Watcher(file chan<- string) error {
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("enforce: error creating filesystem watcher:\n%v", err)
 	}
 	defer fsw.Close()
 
-	exist, err := cablib.PathExists(enforceDir)
+	exist, err := helpers.PathExists(enforceDir)
 	if err != nil {
 		return fmt.Errorf("enforce: error checking existence of %q:\n%v", enforceDir, err)
 	}

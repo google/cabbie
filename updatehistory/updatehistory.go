@@ -272,7 +272,7 @@ func (hc *History) Close() {
 }
 
 func (hc *History) closeItems() {
-	//TODO Using range causes application to occasionally hang.
+	//TODO(b/136258504) Using range causes application to occasionally hang.
 	for i := 0; i < len(hc.Entries); i++ {
 		if hc.Entries[i] != nil {
 			hc.Entries[i].Item.Release()

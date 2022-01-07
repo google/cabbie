@@ -17,23 +17,48 @@ package metrics
 
 import "sync"
 
-type metricData struct {
-	name    string
+// MetricData stores metric information.
+type MetricData struct {
+	Name    string
 	service string
+	mu      sync.Mutex
+	Fields  map[string]interface{}
+}
+
+// AddBoolField adds a bool field to a metric.
+func (m *MetricData) AddBoolField(name string, value bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Fields == nil {
+		m.Fields = make(map[string]interface{})
+	}
+	m.Fields[name] = value
+}
+
+// AddStringField adds a string field to a metric.
+func (m *MetricData) AddStringField(name, value string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Fields == nil {
+		m.Fields = make(map[string]interface{})
+	}
+	m.Fields[name] = value
 }
 
 // Bool implements a Bool-type metric.
 type Bool struct {
-	value bool
+	Value bool
 	mu    sync.Mutex
-	data  *metricData
+	Data  *MetricData
 }
 
 // NewBool sets the metric to a new Bool value.
 func NewBool(name, service string) (*Bool, error) {
 	return &Bool{
-		data: &metricData{
-			name:    name,
+		Data: &MetricData{
+			Name:    name,
 			service: service,
 		},
 	}, nil
@@ -44,22 +69,22 @@ func (b *Bool) Set(value bool) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.value = value
+	b.Value = value
 	return nil
 }
 
 // Int implements a Int-type metric.
 type Int struct {
-	value int64
+	Value int64
 	mu    sync.Mutex
-	data  *metricData
+	Data  *MetricData
 }
 
 // NewInt sets the metric to a new Int value.
 func NewInt(name, service string) (*Int, error) {
 	return &Int{
-		data: &metricData{
-			name:    name,
+		Data: &MetricData{
+			Name:    name,
 			service: service,
 		},
 	}, nil
@@ -70,15 +95,15 @@ func (i *Int) Set(value int64) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	i.value = value
+	i.Value = value
 	return nil
 }
 
 // NewCounter sets the metric to a new Int value.
 func NewCounter(name, service string) (*Int, error) {
 	return &Int{
-		data: &metricData{
-			name:    name,
+		Data: &MetricData{
+			Name:    name,
 			service: service,
 		},
 	}, nil
@@ -89,22 +114,22 @@ func (i *Int) Increment() error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	i.value++
+	i.Value++
 	return nil
 }
 
 // String implements a String-type metric.
 type String struct {
-	value string
+	Value string
 	mu    sync.Mutex
-	data  *metricData
+	Data  *MetricData
 }
 
 // NewString sets the metric to a new string value.
 func NewString(name, service string) (*String, error) {
 	return &String{
-		data: &metricData{
-			name:    name,
+		Data: &MetricData{
+			Name:    name,
 			service: service,
 		},
 	}, nil
@@ -115,6 +140,6 @@ func (s *String) Set(value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.value = value
+	s.Value = value
 	return nil
 }

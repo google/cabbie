@@ -14,12 +14,13 @@
 package main
 
 import (
-	"context"
+	"golang.org/x/net/context"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"flag"
+	"github.com/google/cabbie/cablib"
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatecollection"
@@ -54,7 +55,7 @@ func (c hideCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interface{
 	if c.unhide {
 		if err := unhide(kbs); err != nil {
 			fmt.Println(err)
-			elog.Error(112, fmt.Sprintf("Error unhiding an update: %v", err))
+			elog.Error(cablib.EvtErrUnhide, fmt.Sprintf("Error unhiding an update: %v", err))
 		}
 		return subcommands.ExitSuccess
 	}
@@ -65,7 +66,7 @@ func (c hideCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interface{
 	return subcommands.ExitSuccess
 }
 
-// TODO: Turn into shared function that can be used by multiple actions
+// TODO(cjgenevi): Turn into shared function that can be used by multiple actions
 func findUpdates(criteria string) (*updatecollection.Collection, error) {
 	// Start Windows update session
 	s, err := session.New()
@@ -93,9 +94,9 @@ func unhide(kbs KBSet) error {
 
 	for _, u := range uc.Updates {
 		if kbs.Search(u.KBArticleIDs) {
-			elog.Info(002, fmt.Sprintf("Unhiding update:\n%s", u.Title))
+			elog.Info(cablib.EvtUnhide, fmt.Sprintf("Unhiding update:\n%s", u.Title))
 			if err := u.UnHide(); err != nil {
-				elog.Error(201, fmt.Sprintf("Failed to unhide update %s:\n %s", u.Title, err))
+				elog.Error(cablib.EvtErrUnhide, fmt.Sprintf("Failed to unhide update %s:\n %s", u.Title, err))
 			}
 		}
 	}
@@ -113,9 +114,9 @@ func hide(kbs KBSet) error {
 
 	for _, u := range uc.Updates {
 		if kbs.Search(u.KBArticleIDs) {
-			elog.Info(002, fmt.Sprintf("Hiding update:\n%s", u.Title))
+			elog.Info(cablib.EvtHide, fmt.Sprintf("Hiding update:\n%s", u.Title))
 			if err := u.Hide(); err != nil {
-				elog.Error(201, fmt.Sprintf("Failed to hide update %s:\n %s", u.Title, err))
+				elog.Error(cablib.EvtErrHide, fmt.Sprintf("Failed to hide update %s:\n %s", u.Title, err))
 			}
 		}
 	}

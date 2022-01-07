@@ -14,12 +14,13 @@
 package main
 
 import (
-	"context"
+	"golang.org/x/net/context"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"flag"
+	"github.com/google/cabbie/cablib"
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatehistory"
@@ -41,7 +42,7 @@ func (c *historyCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interf
 	h, err := history()
 	if err != nil {
 		fmt.Printf("Failed to get update history: %s", err)
-		elog.Error(111, fmt.Sprintf("Failed to get Update history: %s", err))
+		elog.Error(cablib.EvtErrHistory, fmt.Sprintf("Failed to get Update history: %s", err))
 		return subcommands.ExitFailure
 	}
 	defer h.Close()
@@ -66,6 +67,6 @@ func history() (*updatehistory.History, error) {
 	}
 	defer searcher.Close()
 
-	elog.Info(002, "Collecting installed updates...")
+	elog.Info(cablib.EvtHistory, "Collecting installed updates...")
 	return updatehistory.Get(searcher)
 }
