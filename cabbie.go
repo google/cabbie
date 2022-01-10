@@ -19,7 +19,6 @@
 package main
 
 import (
-	"golang.org/x/net/context"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
@@ -27,24 +26,28 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"flag"
-	"github.com/google/cabbie/metrics"
-	"github.com/google/cabbie/notification"
+
+	"github.com/google/aukera/client"
 	"github.com/google/cabbie/cablib"
 	"github.com/google/cabbie/enforcement"
+	"github.com/google/cabbie/logger"
+	"github.com/google/cabbie/metrics"
+	"github.com/google/cabbie/notification"
 	"github.com/google/cabbie/servicemgr"
-	"github.com/google/aukera/client"
+	"github.com/google/subcommands"
 	"github.com/scjalliance/comshim"
 	"golang.org/x/sys/windows/registry"
-	"golang.org/x/sys/windows/svc/debug"
-	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc"
-	"github.com/google/subcommands"
+	"golang.org/x/sys/windows/svc/debug"
 )
 
 var (
 	elog             debug.Log
 	runInDebug       = flag.Bool("debug", false, "Run in debug mode")
+	showOutput       = flag.Bool("showOutput", false, "Print logs to stdout")
 	config           = new(Settings)
 	categoryDefaults = []string{"Critical Updates", "Definition Updates", "Security Updates"}
 	rebootEvent      = make(chan bool, 10)
@@ -520,15 +523,10 @@ func enableThirdPartyUpdates() error {
 func main() {
 	flag.Parse()
 	var err error
-
-	if *runInDebug {
-		elog = debug.New(cablib.LogSrcName)
-	} else {
-		elog, err = eventlog.Open(cablib.LogSrcName)
-		if err != nil {
-			fmt.Printf("Failed to create event: %v", err)
-			os.Exit(2)
-		}
+	elog, err = logger.New(*showOutput, *runInDebug)
+	if err != nil {
+		fmt.Printf("failed to initialize logger: %v", err)
+		os.Exit(2)
 	}
 	defer elog.Close()
 
