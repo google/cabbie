@@ -533,7 +533,7 @@ func main() {
 	// Load Cabbie config settings.
 	config = newSettings()
 	if err = config.regLoad(cablib.RegPath); err != nil {
-		elog.Error(cablib.EvtErrConfig, fmt.Sprintf("Failed to load Cabbie config, using defaults:\n%v\nError:%v", config, err))
+		elog.Warning(cablib.EvtErrConfig, fmt.Sprintf("Failed to load Cabbie config from %s, using defaults:\n%v", "HKLM:\\"+cablib.RegPath, config))
 	}
 
 	// If a profiling port is specified, start an HTTP server
