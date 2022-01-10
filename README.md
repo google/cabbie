@@ -96,6 +96,10 @@ Install all applicable updates:
 
 `cabbie install -all`
 
+Log to stdout while cabbie is running (useful for interactive installs):
+
+`cabbie --showOutput install`
+
 ### History
 
 Retrieves the recorded history of installed updates.
