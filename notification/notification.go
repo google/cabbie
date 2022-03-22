@@ -15,53 +15,9 @@
 // Package notification provides user notification messages.
 package notification
 
-import (
-	"fmt"
-	"time"
-
-	"gopkg.in/toast.v1"
-)
-
 var (
 	appID = "Cabbie"
 )
-
-// NewRebootMessage returns a standard reboot message.
-func NewRebootMessage(seconds int) Notification {
-	t := time.Now().Add(time.Second * time.Duration(seconds)).Format(time.UnixDate)
-	return &toast.Notification{
-		AppID:   appID,
-		Title:   "Reboot Your Machine",
-		Message: fmt.Sprintf("Reboot now to finish installing updates. Your machine will auto reboot at %s.", t),
-	}
-}
-
-// RebootPopup returns a reboot warning popup message.
-func RebootPopup(minutes int) Notification {
-	return &toast.Notification{
-		AppID:   appID,
-		Title:   "Force Reboot Soon",
-		Message: fmt.Sprintf("To finish installing the newest updates, your machine will auto reboot in %d minutes.", minutes),
-	}
-}
-
-// NewAvailableUpdateMessage returns an available updates message.
-func NewAvailableUpdateMessage() Notification {
-	return &toast.Notification{
-		AppID:   appID,
-		Title:   "Updates Available",
-		Message: "New Windows updates are now available. Please install at your earliest convenience.",
-	}
-}
-
-// NewInstallingMessage returns an installing updates message.
-func NewInstallingMessage() Notification {
-	return &toast.Notification{
-		AppID:   appID,
-		Title:   "Installing Updates",
-		Message: "Cabbie is installing new updates.",
-	}
-}
 
 // CleanNotifications deletes any active Cabbie notification messages.
 func CleanNotifications(name string) error {
