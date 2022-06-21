@@ -36,10 +36,15 @@ type Category struct {
 
 // Update contains the update interface and properties that are available to an update.
 type Update struct {
-	Item                     *ole.IDispatch
-	Title                    string
+	Item  *ole.IDispatch
+	Title string
+
+	AutoDownload             int
+	AutoSelection            int
+	BrowseOnly               bool
 	CanRequireSource         bool
 	Categories               []Category
+	CveIDs                   []string
 	Deadline                 time.Time
 	Description              string
 	EulaAccepted             bool
@@ -49,11 +54,15 @@ type Update struct {
 	IsHidden                 bool
 	IsInstalled              bool
 	IsMandatory              bool
+	IsPresent                bool
 	IsUninstallable          bool
+	KBArticleIDs             []string
 	LastDeploymentChangeTime time.Time
 	MaxDownloadSize          int
 	MinDownloadSize          int
 	MsrcSeverity             string
+	PerUser                  bool
+	RebootRequired           bool
 	RecommendedCPUSpeed      int
 	RecommendedHardDiskSpace int
 	RecommendedMemory        int
@@ -61,12 +70,4 @@ type Update struct {
 	SupersededUpdateIDs      []string
 	SupportURL               string
 	Type                     string
-	KBArticleIDs             []string
-	RebootRequired           bool
-	IsPresent                bool
-	CveIDs                   []string
-	BrowseOnly               bool
-	PerUser                  bool
-	AutoSelection            int
-	AutoDownload             int
 }
