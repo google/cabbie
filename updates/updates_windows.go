@@ -30,59 +30,56 @@ import (
 
 // New expands an IUpdate object into a usable go struct.
 func New(item *ole.IDispatch) (*Update, []error) {
-	var errors []error
+	var errs []error
 	u := &Update{Item: item}
 
 	fields := reflect.TypeOf(*u)
 	data := make(map[string]interface{})
-	var err error
 	for i := 0; i < fields.NumField(); i++ {
 		field := fields.Field(i)
 		p := field.Name
+		if p == "Item" {
+			continue
+		}
+
+		v, err := oleutil.GetProperty(u.Item, p)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("get property %q: %w", p, err))
+			continue
+		}
+
 		switch field.Type.String() {
-		case "string":
-			data[p], err = u.toString(p)
-			if err != nil {
-				errors = append(errors, err)
-			}
 		case "bool":
-			data[p], err = u.toBool(p)
-			if err != nil {
-				errors = append(errors, err)
-			}
+			data[p] = toBool(v)
 		case "int":
-			data[p], err = u.toInt(p)
-			if err != nil {
-				errors = append(errors, err)
-			}
-		case "[]string":
-			data[p], err = u.toStringSlice(p)
-			if err != nil {
-				errors = append(errors, err)
-			}
+			data[p] = toInt(v)
+		case "string":
+			data[p] = toString(v)
 		case "time.Time":
-			data[p], err = u.toDateTime(p)
+			data[p] = toTime(v)
+		case "[]string":
+			data[p], err = toStringSlice(v)
 			if err != nil {
-				errors = append(errors, err)
+				errs = append(errs, fmt.Errorf("extract string slice for %q: %w", p, err))
 			}
 		case "[]updates.Category":
-			data[p], err = u.toCategories(p)
+			data[p], err = toCategories(v)
 			if err != nil {
-				errors = append(errors, err)
+				errs = append(errs, fmt.Errorf("extract category slice: %w", err))
 			}
 		case "updates.Identity":
-			data[p], err = u.toIdentity(p)
+			data[p], err = toIdentity(v)
 			if err != nil {
-				errors = append(errors, err)
+				errs = append(errs, err)
 			}
 		}
 	}
 
 	if err := u.fillStruct(data); err != nil {
-		errors = append(errors, err)
+		errs = append(errs, err)
 	}
 
-	return u, errors
+	return u, errs
 }
 
 // AcceptEula accepts the Microsoft Software License Terms that are associated with Windows Update.
@@ -115,139 +112,115 @@ func (up *Update) UnHide() error {
 	return nil
 }
 
-func (up *Update) toString(property string) (string, error) {
-	p, err := oleutil.GetProperty(up.Item, property)
-	if err != nil {
-		return "", err
-	}
-	return p.ToString(), nil
+func toString(v *ole.VARIANT) string {
+	return v.ToString()
 }
 
-func (up *Update) toBool(property string) (bool, error) {
-	p, err := oleutil.GetProperty(up.Item, property)
-	if err != nil {
-		return false, err
-	}
-	return p.Value().(bool), nil
+func toBool(v *ole.VARIANT) bool {
+	return v.Value().(bool)
 }
 
-func (up *Update) toInt(property string) (int, error) {
-	p, err := oleutil.GetProperty(up.Item, property)
-	if err != nil {
-		return 0, err
+func toInt(v *ole.VARIANT) int {
+	if v.Value() == nil {
+		return 0
 	}
-
-	if p.Value() == nil {
-		return 0, nil
-	}
-	return int(p.Value().(int32)), nil
+	return int(v.Value().(int32))
 }
 
-func (up *Update) toDateTime(property string) (time.Time, error) {
-	p, err := oleutil.GetProperty(up.Item, property)
-	if err != nil {
-		return time.Time{}, err
+func toTime(v *ole.VARIANT) time.Time {
+	if v.Value() == nil {
+		return time.Time{}
 	}
-
-	if p.Value() == nil {
-		return time.Time{}, nil
-	}
-	return p.Value().(time.Time), nil
+	return v.Value().(time.Time)
 }
 
-func (up *Update) toStringSlice(property string) ([]string, error) {
-	p, err := oleutil.GetProperty(up.Item, property)
-	if err != nil {
-		return nil, err
-	}
-	pd := p.ToIDispatch()
+func forEachIn(v *ole.VARIANT, do func(item *ole.VARIANT) error) error {
+	pd := v.ToIDispatch()
 	defer pd.Release()
 
 	count, err := cablib.Count(pd)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("count: %w", err)
 	}
 
-	r := make([]string, count)
 	for i := 0; i < count; i++ {
-		prop, err := oleutil.GetProperty(pd, "Item", i)
+		item, err := oleutil.GetProperty(pd, "Item", i)
 		if err != nil {
-			return nil, err
+			return fmt.Errorf("get item %d: %w", i, err)
 		}
-		r[i] = prop.ToString()
+
+		if err := do(item); err != nil {
+			return fmt.Errorf("do item %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func toStringSlice(v *ole.VARIANT) ([]string, error) {
+	var r []string
+	if err := forEachIn(v, func(item *ole.VARIANT) error {
+		r = append(r, toString(item))
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("looping strings: %w", err)
 	}
 	return r, nil
 }
 
-func (up *Update) toCategories(property string) ([]Category, error) {
-	cs := []Category{}
-	cats, err := oleutil.GetProperty(up.Item, "Categories")
-	if err != nil {
-		return cs, err
-	}
-	catsd := cats.ToIDispatch()
-	defer catsd.Release()
-
-	count, err := cablib.Count(catsd)
-	if err != nil {
-		return cs, err
-	}
-
-	for i := 0; i < count; i++ {
-		item, err := oleutil.GetProperty(catsd, "item", i)
-		if err != nil {
-			continue
-		}
+func toCategories(v *ole.VARIANT) ([]Category, error) {
+	var r []Category
+	if err := forEachIn(v, func(item *ole.VARIANT) error {
 		itemd := item.ToIDispatch()
+		defer itemd.Release()
 
 		n, err := oleutil.GetProperty(itemd, "Name")
 		if err != nil {
-			itemd.Release()
-			continue
+			return fmt.Errorf("get category name: %w", err)
 		}
+		defer n.Clear()
+
 		t, err := oleutil.GetProperty(itemd, "Type")
 		if err != nil {
-			itemd.Release()
-			continue
+			return fmt.Errorf("get category type: %w", err)
 		}
+		defer t.Clear()
+
 		c, err := oleutil.GetProperty(itemd, "CategoryID")
 		if err != nil {
-			itemd.Release()
-			continue
+			return fmt.Errorf("get category id: %w", err)
 		}
+		defer c.Clear()
 
-		cs = append(cs, Category{
-			Name:       n.ToString(),
-			Type:       t.ToString(),
-			CategoryID: c.ToString()})
-		itemd.Release()
-		n.Clear()
-		t.Clear()
-		c.Clear()
+		r = append(r, Category{
+			Name:       toString(n),
+			Type:       toString(t),
+			CategoryID: toString(c),
+		})
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("looping categories: %w", err)
 	}
-
-	return cs, nil
+	return r, nil
 }
 
-func (up *Update) toIdentity(property string) (Identity, error) {
-	p, err := oleutil.GetProperty(up.Item, property)
-	if err != nil {
-		return Identity{}, err
-	}
-	pd := p.ToIDispatch()
+func toIdentity(v *ole.VARIANT) (Identity, error) {
+	pd := v.ToIDispatch()
 	defer pd.Release()
 
 	rn, err := oleutil.GetProperty(pd, "RevisionNumber")
 	if err != nil {
 		return Identity{}, err
 	}
+
 	uid, err := oleutil.GetProperty(pd, "UpdateID")
 	if err != nil {
 		return Identity{}, err
 	}
 
-	return Identity{RevisionNumber: int(rn.Value().(int32)),
-		UpdateID: uid.ToString()}, nil
+	return Identity{
+		RevisionNumber: toInt(rn),
+		UpdateID:       toString(uid),
+	}, nil
 }
 
 func (up *Update) String() string {

@@ -35,6 +35,7 @@ type Category struct {
 }
 
 // Update contains the update interface and properties that are available to an update.
+// See https://docs.microsoft.com/en-us/windows/win32/api/wuapi/nn-wuapi-iupdate for details.
 type Update struct {
 	Item  *ole.IDispatch
 	Title string
