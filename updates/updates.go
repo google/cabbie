@@ -71,4 +71,8 @@ type Update struct {
 	SupersededUpdateIDs      []string
 	SupportURL               string
 	Type                     string
+
+	// DriverClass is part of the IWindowsDriverUpdate object which can extend the IUpdate object.
+	// See: https://docs.microsoft.com/en-us/windows/win32/api/wuapi/nn-wuapi-iwindowsdriverupdate
+	DriverClass string
 }

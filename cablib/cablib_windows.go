@@ -30,6 +30,10 @@ import (
 
 var (
 	rebootRequired = RebootRequired
+
+	// IIDIWindowsDriverUpdate is the GUID for the IWindowsDriverUpdate COM interface.
+	// See: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-uamg/e839e7e0-1795-451b-94ef-abacd6cbecac
+	IIDIWindowsDriverUpdate = ole.NewGUID("B383CD1A-5CE9-4504-9F63-764B1236F191")
 )
 
 // SetRebootTime creates the reboot time key.

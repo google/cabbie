@@ -42,6 +42,15 @@ func New(item *ole.IDispatch) (*Update, []error) {
 			continue
 		}
 
+		if p == "DriverClass" {
+			// Check if IUpdate object also implements IWindowsDriverUpdate object.
+			// If not, skip attempting to extract IWindowsDriverUpdate properties.
+			// See https://docs.microsoft.com/en-us/windows/win32/api/wuapi/nn-wuapi-iwindowsdriverupdate#remarks
+			if _, err := u.Item.QueryInterface(cablib.IIDIWindowsDriverUpdate); err != nil {
+				continue
+			}
+		}
+
 		v, err := oleutil.GetProperty(u.Item, p)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("get property %q: %w", p, err))
