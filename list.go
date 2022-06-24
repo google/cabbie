@@ -101,9 +101,7 @@ func listUpdates(hidden bool) ([]string, []string, error) {
 		if !u.InCategories([]string{"Definition Updates"}) {
 			reqUpdates = append(reqUpdates, u.Title)
 			if (time.Now().Sub(u.LastDeploymentChangeTime).Hours() / 24) > 31 {
-				if devicePatched == true {
-					devicePatched = false
-				}
+				devicePatched = false
 			}
 		}
 	}
