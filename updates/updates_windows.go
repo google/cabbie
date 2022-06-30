@@ -220,11 +220,13 @@ func toIdentity(v *ole.VARIANT) (Identity, error) {
 	if err != nil {
 		return Identity{}, err
 	}
+	defer rn.Clear()
 
 	uid, err := oleutil.GetProperty(pd, "UpdateID")
 	if err != nil {
 		return Identity{}, err
 	}
+	defer uid.Clear()
 
 	return Identity{
 		RevisionNumber: toInt(rn),
