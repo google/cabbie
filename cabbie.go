@@ -25,6 +25,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"flag"
@@ -49,6 +50,8 @@ var (
 	categoryDefaults = []string{"Critical Updates", "Definition Updates", "Security Updates"}
 	rebootEvent      = make(chan bool, 10)
 	rebootActive     = false
+
+	excludedDrivers driverExcludes
 
 	// Metrics
 	virusUpdateSuccess         = new(metrics.Bool)
@@ -81,6 +84,23 @@ type Settings struct {
 
 type tickers struct {
 	Default, Aukera, List, Virus, Driver, Enforcement *time.Ticker
+}
+
+type driverExcludes struct {
+	mutex sync.Mutex
+	e     []enforcement.DriverExclude
+}
+
+func (d *driverExcludes) set(v []enforcement.DriverExclude) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	d.e = v
+}
+
+func (d *driverExcludes) get() []enforcement.DriverExclude {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	return d.e
 }
 
 func initTickers() tickers {
@@ -265,27 +285,28 @@ func setRebootMetric() {
 }
 
 func enforce() error {
-	kbs, err := enforcement.Get()
+	updates, err := enforcement.Get()
 	if err != nil {
 		return fmt.Errorf("error retrieving required updates: %v", err)
 	}
-	if err := enforcedUpdateCount.Set(int64(len(kbs.Required))); err != nil {
+	if err := enforcedUpdateCount.Set(int64(len(updates.Required))); err != nil {
 		elog.Error(cablib.EvtErrMetricReport, fmt.Sprintf("Error posting metric:\n%v", err))
 	}
 	var failures error
-	if len(kbs.Required) > 0 {
-		i := installCmd{kbs: strings.Join(kbs.Required, ",")}
+	if len(updates.Required) > 0 {
+		i := installCmd{kbs: strings.Join(updates.Required, ",")}
 		if err := i.installUpdates(); err != nil {
 			failures = fmt.Errorf("error enforcing required updates: %v", err)
 			elog.Error(cablib.EvtErrInstallFailure, failures.Error())
 		}
 	}
-	if len(kbs.Hidden) > 0 {
-		if err := hide(NewKBSetFromSlice(kbs.Hidden)); err != nil {
+	if len(updates.Hidden) > 0 {
+		if err := hide(NewKBSetFromSlice(updates.Hidden)); err != nil {
 			failures = fmt.Errorf("error hiding updates: %v", err)
 			elog.Error(cablib.EvtErrHide, failures.Error())
 		}
 	}
+	excludedDrivers.set(updates.ExcludedDrivers)
 	return failures
 }
 
