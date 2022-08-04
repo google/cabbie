@@ -33,6 +33,8 @@ const (
 	CabbieExe = `cabbie.exe`
 	// CabbiePath is the Windows path to the cabbie files.
 	CabbiePath = `C:\Program Files\Google\Cabbie\`
+	// EventDLL is the windows path to the event.dll.
+	EventDLL = `events.dll`
 	// WUReg is the registry path to the local update client configuration.
 	WUReg = `SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate`
 	// MetricSvc is service name of a metric.
@@ -44,7 +46,7 @@ const (
 )
 
 var (
-	now            = time.Now
+	now = time.Now
 	// RegPath is the registry path to the cabbie settings.
 	RegPath = `SOFTWARE\Google\Cabbie\`
 )
