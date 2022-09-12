@@ -106,6 +106,26 @@ func installService(name, desc string) error {
 		StartType:   mgr.StartAutomatic,
 	}
 
+	// Configure event logging.
+	dllpath, err := filepath.Abs(cablib.CabbiePath + cablib.EventDLL)
+	if err != nil {
+		return err
+	}
+	hasDLL, err := helpers.PathExists(dllpath)
+	if err != nil {
+		return err
+	}
+	supports := uint32(eventlog.Error | eventlog.Warning | eventlog.Info)
+	if hasDLL {
+		if err = eventlog.Install(cablib.LogSrcName, dllpath, false, supports); err != nil {
+			return fmt.Errorf("event log source (%s) creation failed: %+v", dllpath, err)
+		}
+	} else {
+		if err = eventlog.InstallAsEventCreate(cablib.LogSrcName, supports); err != nil {
+			return fmt.Errorf("event log source (default) creation failed: %+v", err)
+		}
+	}
+
 	// Install or update Cabbie service.
 	s, err := m.OpenService(name)
 	if err == nil {
@@ -117,25 +137,6 @@ func installService(name, desc string) error {
 		s, err = m.CreateService(name, exepath, config)
 		if err != nil {
 			return err
-		}
-
-		dllpath, err := filepath.Abs(cablib.CabbiePath + cablib.EventDLL)
-		if err != nil {
-			return err
-		}
-		hasDLL, err := helpers.PathExists(dllpath)
-		if err != nil {
-			return err
-		}
-		supports := uint32(eventlog.Error | eventlog.Warning | eventlog.Info)
-		if hasDLL {
-			if err = eventlog.Install(cablib.LogSrcName, dllpath, false, supports); err != nil {
-				return fmt.Errorf("event log source (%s) creation failed: %+v", dllpath, err)
-			}
-		} else {
-			if err = eventlog.InstallAsEventCreate(cablib.LogSrcName, supports); err != nil {
-				return fmt.Errorf("event log source (default) creation failed: %+v", err)
-			}
 		}
 	}
 	defer s.Close()
