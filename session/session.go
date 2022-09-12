@@ -17,11 +17,7 @@
 package session
 
 import (
-	"fmt"
-
-	"github.com/google/cabbie/cablib"
 	"github.com/go-ole/go-ole"
-	"github.com/go-ole/go-ole/oleutil"
 )
 
 type updateInterface string
@@ -40,29 +36,3 @@ const (
 	// Installer is the method name to create an update installer interface.
 	Installer updateInterface = "CreateUpdateInstaller"
 )
-
-// New creates an update session object.
-func New() (*UpdateSession, error) {
-
-	session, err := cablib.NewCOMObject("Microsoft.Update.Session")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new COM object: %v", err)
-	}
-	oleutil.PutProperty(session, "ClientApplicationID", clientID)
-	return &UpdateSession{Session: session}, nil
-}
-
-// CreateInterface creates the requested update interface.
-// updateInterface can be one of: Searcher, Downloader, or Installer.
-func (u *UpdateSession) CreateInterface(ui updateInterface) (*ole.IDispatch, error) {
-	us, err := oleutil.CallMethod(u.Session, string(ui))
-	if err != nil {
-		return nil, fmt.Errorf("error creating requested interface: %v", err)
-	}
-	return us.ToIDispatch(), nil
-}
-
-// Close turns down any open update sessions.
-func (u *UpdateSession) Close() {
-	u.Session.Release()
-}

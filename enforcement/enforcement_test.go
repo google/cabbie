@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 var (
@@ -43,15 +44,38 @@ func TestDedupe(t *testing.T) {
 			Enforcements{Required: []string{}},
 		},
 		{
-			"with dups",
+			"with dup requireds",
 			Enforcements{Required: []string{"4018073", "67891011", "4018073", "4018073"}},
 			Enforcements{Required: []string{"4018073", "67891011"}},
+		},
+		{
+			"with dup hidden",
+			Enforcements{Hidden: []string{"4018073", "67891011", "4018073", "4018073"}},
+			Enforcements{Hidden: []string{"4018073", "67891011"}},
+		},
+		{
+			"with dup excluded drivers",
+			Enforcements{ExcludedDrivers: []DriverExclude{
+				{DriverClass: "Dupe"},
+				{DriverClass: "Unique"},
+				{UpdateID: "DupeID"},
+				{DriverClass: "Dupe"},
+				{UpdateID: "DupeID"},
+				{DriverClass: "Dupe", UpdateID: "DupeID"},
+				{DriverClass: "Dupe", UpdateID: "DupeID"},
+			}},
+			Enforcements{ExcludedDrivers: []DriverExclude{
+				{DriverClass: "Dupe"},
+				{DriverClass: "Unique"},
+				{UpdateID: "DupeID"},
+				{DriverClass: "Dupe", UpdateID: "DupeID"},
+			}},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			tt.in.dedupe()
-			if diff := cmp.Diff(tt.in, tt.want); diff != "" {
+			if diff := cmp.Diff(tt.in, tt.want, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("enforcements(%s) returned unexpected diff (-want +got):\n%s", tt.desc, diff)
 			}
 		})
@@ -66,6 +90,21 @@ func TestEnforcements(t *testing.T) {
 	}{
 		{"required.json",
 			Enforcements{Required: []string{"4018073", "67891011"}},
+			nil,
+		},
+		{"hidden.json",
+			Enforcements{Hidden: []string{"4018073", "67891011"}},
+			nil,
+		},
+		{"excluded-drivers.json",
+			Enforcements{ExcludedDrivers: []DriverExclude{
+				{DriverClass: "UnitTest"},
+				{UpdateID: "deadbeef-dead-beef-dead-beefdeadbeef"},
+				{
+					DriverClass: "OtherSnacks",
+					UpdateID:    "cafef00d-cafe-f00d-cafe-f00dcafef00d",
+				},
+			}},
 			nil,
 		},
 		{"invalid.json",

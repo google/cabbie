@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build windows
 // +build windows
 
 // Package enforcement implements filesystem watching for configured required updates.
@@ -44,8 +45,16 @@ var (
 
 // Enforcements track any externally configured update enforcements.
 type Enforcements struct {
-	Required []string `json:"required"`
-	Hidden   []string `json:"hidden"`
+	Required        []string        `json:"required"`
+	ExcludedDrivers []DriverExclude `json:"excluded-drivers"`
+	Hidden          []string        `json:"hidden"`
+}
+
+// DriverExclude specifies criteria to exclude certain driver updates.
+// A driver update is ignored by Cabbie if it matches all criteria.
+type DriverExclude struct {
+	DriverClass string `json:"driver-class"`
+	UpdateID    string `json:"update-id"`
 }
 
 func enforcements(path string) (Enforcements, error) {
@@ -73,35 +82,57 @@ func enforcements(path string) (Enforcements, error) {
 
 // Get attempts to return all known external enforcements.
 func Get() (Enforcements, error) {
-	var e Enforcements
+	var ret Enforcements
 	files, err := ioutil.ReadDir(enforceDir)
 	if err != nil {
-		return e, err
+		return ret, err
 	}
 	for _, f := range files {
 		p := filepath.Join(enforceDir, f.Name())
-		kbs, err := enforcements(p)
+		e, err := enforcements(p)
 		if err != nil {
 			elog.Error(cablib.EvtErrEnforcement, fmt.Sprintf("Error getting updates from %q:\n%v", p, err))
 			continue
 		}
-		e.Required = append(e.Required, kbs.Required...)
+		ret.Required = append(ret.Required, e.Required...)
+		ret.Hidden = append(ret.Hidden, e.Hidden...)
+		ret.ExcludedDrivers = append(ret.ExcludedDrivers, e.ExcludedDrivers...)
 	}
-	e.dedupe()
-	return e, nil
+	ret.dedupe()
+	return ret, nil
 }
 
-func (e *Enforcements) dedupe() {
+// go generics are super new. The following two funcs should be merged
+// into one generic one after the dust has settled.
+
+func uniqueStrings(list []string) []string {
 	u := make([]string, 0)
 	m := make(map[string]bool)
-	for _, v := range e.Required {
+	for _, v := range list {
 		if !m[v] {
 			m[v] = true
 			u = append(u, v)
 		}
 	}
+	return u
+}
 
-	e.Required = u
+func uniqueDriverExclude(list []DriverExclude) []DriverExclude {
+	u := make([]DriverExclude, 0)
+	m := make(map[DriverExclude]bool)
+	for _, v := range list {
+		if !m[v] {
+			m[v] = true
+			u = append(u, v)
+		}
+	}
+	return u
+}
+
+func (e *Enforcements) dedupe() {
+	e.Required = uniqueStrings(e.Required)
+	e.Hidden = uniqueStrings(e.Hidden)
+	e.ExcludedDrivers = uniqueDriverExclude(e.ExcludedDrivers)
 }
 
 // Watcher runs a filesystem watcher for required updates. This is meant to install required updates as soon as they are configured.

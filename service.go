@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,10 +22,11 @@ import (
 
 	"flag"
 	"github.com/google/cabbie/cablib"
-	"github.com/google/subcommands"
-	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc/mgr"
+	"golang.org/x/sys/windows/svc"
+	"github.com/google/subcommands"
+	"github.com/google/glazier/go/helpers"
 )
 
 // Available flags.
@@ -90,7 +91,7 @@ func installService(name, desc string) error {
 		return err
 	}
 	if !isFile {
-		return fmt.Errorf("%v does not exist or is a directory.", exepath)
+		return fmt.Errorf("%v does not exist or is a directory", exepath)
 	}
 
 	m, err := mgr.Connect()
@@ -105,6 +106,26 @@ func installService(name, desc string) error {
 		StartType:   mgr.StartAutomatic,
 	}
 
+	// Configure event logging.
+	dllpath, err := filepath.Abs(cablib.CabbiePath + cablib.EventDLL)
+	if err != nil {
+		return err
+	}
+	hasDLL, err := helpers.PathExists(dllpath)
+	if err != nil {
+		return err
+	}
+	supports := uint32(eventlog.Error | eventlog.Warning | eventlog.Info)
+	if hasDLL {
+		if err = eventlog.Install(cablib.LogSrcName, dllpath, false, supports); err != nil {
+			return fmt.Errorf("event log source (%s) creation failed: %+v", dllpath, err)
+		}
+	} else {
+		if err = eventlog.InstallAsEventCreate(cablib.LogSrcName, supports); err != nil {
+			return fmt.Errorf("event log source (default) creation failed: %+v", err)
+		}
+	}
+
 	// Install or update Cabbie service.
 	s, err := m.OpenService(name)
 	if err == nil {
@@ -117,13 +138,6 @@ func installService(name, desc string) error {
 		if err != nil {
 			return err
 		}
-
-		if err = eventlog.InstallAsEventCreate(cablib.LogSrcName, eventlog.Error|eventlog.Warning|eventlog.Info); err != nil {
-			msg := fmt.Sprintf("event log source creation failed: %+v", err)
-			elog.Error(cablib.EvtErrSvcInstall, msg)
-			fmt.Println(msg)
-		}
-
 	}
 	defer s.Close()
 

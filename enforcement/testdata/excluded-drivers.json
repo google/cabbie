@@ -1,0 +1,14 @@
+{
+  "excluded-drivers": [
+    {
+      "driver-class": "UnitTest"
+    },
+    {
+      "update-id": "deadbeef-dead-beef-dead-beefdeadbeef"
+    },
+    {
+      "driver-class": "OtherSnacks",
+      "update-id": "cafef00d-cafe-f00d-cafe-f00dcafef00d"
+    }
+  ]
+}

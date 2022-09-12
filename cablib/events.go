@@ -62,6 +62,8 @@ const (
 	EvtSvcInstall
 	// EvtMisc indicates that an uncategorized internal event.
 	EvtMisc
+	// EvtDriverUpdateExcluded indicates a driver update was excluded.
+	EvtDriverUpdateExcluded
 )
 
 /*

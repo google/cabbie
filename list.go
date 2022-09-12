@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -89,9 +89,24 @@ func listUpdates(hidden bool) ([]string, []string, error) {
 	}
 	defer uc.Close()
 
+	excludes := excludedDrivers.get()
 	var reqUpdates, optUpdates []string
 	devicePatched := true
+outerLoop:
 	for _, u := range uc.Updates {
+		for _, e := range excludes {
+			filterPresent := e.DriverClass != "" || e.UpdateID != ""
+			csFilterAbsentOrMatching := e.DriverClass == "" || e.DriverClass == u.DriverClass
+			idFilterAbsentOrMatching := e.UpdateID == "" || e.UpdateID == u.Identity.UpdateID
+			if filterPresent && csFilterAbsentOrMatching && idFilterAbsentOrMatching {
+				elog.Info(cablib.EvtDriverUpdateExcluded, fmt.Sprintf(
+					"Driver update %q excluded.\nFiltered driver class: %q\nFiltered update ID: %q",
+					u.Title, e.DriverClass, e.UpdateID,
+				))
+				continue outerLoop
+			}
+		}
+
 		// Add to optional updates list if the update does not match the required categories.
 		if !u.InCategories(config.RequiredCategories) {
 			optUpdates = append(optUpdates, u.Title)
@@ -101,9 +116,7 @@ func listUpdates(hidden bool) ([]string, []string, error) {
 		if !u.InCategories([]string{"Definition Updates"}) {
 			reqUpdates = append(reqUpdates, u.Title)
 			if (time.Now().Sub(u.LastDeploymentChangeTime).Hours() / 24) > 31 {
-				if devicePatched == true {
-					devicePatched = false
-				}
+				devicePatched = false
 			}
 		}
 	}
