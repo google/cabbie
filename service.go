@@ -22,6 +22,7 @@ import (
 
 	"flag"
 	"github.com/google/cabbie/cablib"
+	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc/mgr"
 	"golang.org/x/sys/windows/svc"
@@ -79,6 +80,55 @@ func (c serviceCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	return rc
 }
 
+// checkRegistry checks if the registry path for Cabbie's event log setup exists.
+// Returns true if the path exists, or false if it does not exist.
+func checkRegistry() (bool, error) {
+	_, err := registry.OpenKey(registry.LOCAL_MACHINE, cablib.EventReg, registry.CREATE_SUB_KEY)
+	if err != nil {
+		if err == registry.ErrNotExist {
+			return false, nil
+		}
+	}
+	return true, err
+}
+
+func configureEventLog() error {
+	// Assemble the path to the event DLL file on the disk.
+	dllpath, err := filepath.Abs(cablib.CabbiePath + cablib.EventDLL)
+	if err != nil {
+		return err
+	}
+	// Determine if the event DLL file exists on the disk.
+	hasDLL, err := helpers.PathExists(dllpath)
+	if err != nil {
+		return err
+	}
+	// Define the supported event types.
+	supports := uint32(eventlog.Error | eventlog.Warning | eventlog.Info)
+	// Check if the Cabbie event log registry key exists.
+	r, err := checkRegistry()
+	if err != nil {
+		return fmt.Errorf("checking Cabbie event log registry key: %v", err)
+	}
+	// If the Cabbie event log registry key exists, remove it.
+	if r {
+		if err := eventlog.Remove(cablib.LogSrcName); err != nil {
+			return fmt.Errorf("removing Cabbie event log registry key: %v", err)
+		}
+	}
+	// Configure event logging.
+	if hasDLL {
+		if err := eventlog.Install(cablib.LogSrcName, dllpath, false, supports); err != nil {
+			return fmt.Errorf("event log source (%s) creation failed: %+v", dllpath, err)
+		}
+		return nil
+	}
+	if err := eventlog.InstallAsEventCreate(cablib.LogSrcName, supports); err != nil {
+		return fmt.Errorf("event log source (default) creation failed: %+v", err)
+	}
+	return nil
+}
+
 func installService(name, desc string) error {
 	exepath, err := filepath.Abs(cablib.CabbiePath + cablib.CabbieExe)
 	if err != nil {
@@ -107,23 +157,8 @@ func installService(name, desc string) error {
 	}
 
 	// Configure event logging.
-	dllpath, err := filepath.Abs(cablib.CabbiePath + cablib.EventDLL)
-	if err != nil {
-		return err
-	}
-	hasDLL, err := helpers.PathExists(dllpath)
-	if err != nil {
-		return err
-	}
-	supports := uint32(eventlog.Error | eventlog.Warning | eventlog.Info)
-	if hasDLL {
-		if err = eventlog.Install(cablib.LogSrcName, dllpath, false, supports); err != nil {
-			return fmt.Errorf("event log source (%s) creation failed: %+v", dllpath, err)
-		}
-	} else {
-		if err = eventlog.InstallAsEventCreate(cablib.LogSrcName, supports); err != nil {
-			return fmt.Errorf("event log source (default) creation failed: %+v", err)
-		}
+	if err := configureEventLog(); err != nil {
+		return fmt.Errorf("configuring event log: %v", err)
 	}
 
 	// Install or update Cabbie service.
