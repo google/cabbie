@@ -80,18 +80,6 @@ func (c serviceCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	return rc
 }
 
-// checkRegistry checks if the registry path for Cabbie's event log setup exists.
-// Returns true if the path exists, or false if it does not exist.
-func checkRegistry() (bool, error) {
-	_, err := registry.OpenKey(registry.LOCAL_MACHINE, cablib.EventReg, registry.CREATE_SUB_KEY)
-	if err != nil {
-		if err == registry.ErrNotExist {
-			return false, nil
-		}
-	}
-	return true, err
-}
-
 func configureEventLog() error {
 	// Assemble the path to the event DLL file on the disk.
 	dllpath, err := filepath.Abs(cablib.CabbiePath + cablib.EventDLL)
@@ -105,16 +93,12 @@ func configureEventLog() error {
 	}
 	// Define the supported event types.
 	supports := uint32(eventlog.Error | eventlog.Warning | eventlog.Info)
-	// Check if the Cabbie event log registry key exists.
-	r, err := checkRegistry()
-	if err != nil {
-		return fmt.Errorf("checking Cabbie event log registry key: %v", err)
-	}
-	// If the Cabbie event log registry key exists, remove it.
-	if r {
-		if err := eventlog.Remove(cablib.LogSrcName); err != nil {
-			return fmt.Errorf("removing Cabbie event log registry key: %v", err)
-		}
+	// Attempt to remove the Cabbie event log registry key.
+	err = eventlog.Remove(cablib.LogSrcName)
+	// Proceed if the Cabbie event log registry key doesn't exist.
+	if err != nil && err != registry.ErrNotExist {
+		// If we get here, an unexpected error occurred.
+		return fmt.Errorf("eventLog.Remove(%s): %v", cablib.LogSrcName, err)
 	}
 	// Configure event logging.
 	if hasDLL {
