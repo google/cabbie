@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -372,11 +372,6 @@ func (i *installCmd) installUpdates() error {
 	}
 
 	if rebootRequired {
-		if i.Interactive {
-			fmt.Println("Updates have been installed, please reboot to complete the installation...")
-			rebootEvent <- rebootRequired
-			return nil
-		}
 		rebootMessage(int(config.RebootDelay))
 		if err := cablib.SetRebootTime(config.RebootDelay); err != nil {
 			elog.Error(cablib.EvtErrPowerMgmt, fmt.Sprintf("Failed to run reboot command:\n%v", err))
