@@ -1,7 +1,9 @@
 ; This file registers event message IDs for use by Cabbie. The message dialog
 ; is not embedded here; it's passed through from the application.
 ;
-; To build the events.dll:
+; To build the events.dll, download and install any version of Visual Studio: https://visualstudio.microsoft.com/downloads/.
+; During installation, be sure to install "desktop development with C++."
+; Launch the "Developer Command Prompt" and run the following:
 ;   $ mc.exe events.mc
 ;   $ rc.exe events.rc
 ;   $ link -dll -noentry events.res
