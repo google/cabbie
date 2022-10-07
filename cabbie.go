@@ -581,7 +581,6 @@ func main() {
 	defer comshim.Done()
 
 	// Running as Service.
-	// TODO(b/147692789): move service logic into its own subcommand.
 	if isSvc && len(os.Args) == 1 {
 		if err := startService(*runInDebug); err != nil {
 			elog.Error(cablib.EvtErrService, fmt.Sprintf("Failed to run service: %v", err))
