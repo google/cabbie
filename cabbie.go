@@ -331,8 +331,9 @@ func runMainLoop() error {
 	var enforcedFile = make(chan string)
 	go func() {
 		for {
-			err := enforcement.Watcher(enforcedFile)
-			elog.Error(cablib.EvtErrEnforcement, fmt.Sprintf("failed to initialize enforcement config watcher; relying on enforcement schedule: %v", err))
+			if err := enforcement.Watcher(enforcedFile); err == nil {
+				elog.Error(cablib.EvtErrEnforcement, fmt.Sprintf("failed to initialize enforcement config watcher; relying on default enforcement schedule: %v", err))
+			}
 			if err := enforcementWatcherFailures.Increment(); err != nil {
 				elog.Error(cablib.EvtErrMetricReport, fmt.Sprintf("unable to increment enforcementWatcherFailures metric: %v", err))
 			}

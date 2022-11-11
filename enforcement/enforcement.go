@@ -29,13 +29,10 @@ import (
 	"github.com/google/cabbie/cablib"
 
 	"gopkg.in/fsnotify.v1"
-	"golang.org/x/sys/windows/svc/debug"
 	"github.com/google/glazier/go/helpers"
 )
 
 var (
-	elog debug.Log
-
 	errFileType    = errors.New("file is not json")
 	errInvalidFile = errors.New("file path is invalid")
 	errParsing     = errors.New("could not parse file content")
@@ -91,7 +88,7 @@ func Get() (Enforcements, error) {
 		p := filepath.Join(enforceDir, f.Name())
 		e, err := enforcements(p)
 		if err != nil {
-			elog.Error(cablib.EvtErrEnforcement, fmt.Sprintf("Error getting updates from %q:\n%v", p, err))
+			// TODO(mattl): surface errors here somehow
 			continue
 		}
 		ret.Required = append(ret.Required, e.Required...)
