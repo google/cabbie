@@ -108,11 +108,11 @@ Hides or unhides an update from installation.
 
 Hide a KB:
 
-`cabbie hide --kb="1234513"`
+`cabbie hide --kbs="1234513"`
 
 Make an update available for install:
 
-`cabbie hide --unhide --kb="1234513"`
+`cabbie hide --unhide --kbs="1234513"`
 
 ### Service
 
