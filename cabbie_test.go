@@ -25,22 +25,6 @@ const (
 	testPath = `SOFTWARE\Bar`
 )
 
-type testCabbieLog struct {
-}
-
-func (f *testCabbieLog) Info(id uint32, msg string) error {
-	return nil
-}
-func (f *testCabbieLog) Error(id uint32, msg string) error {
-	return nil
-}
-func (f *testCabbieLog) Warning(id uint32, msg string) error {
-	return nil
-}
-func (f *testCabbieLog) Close() error {
-	return nil
-}
-
 func createTestKeys() error {
 	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, testPath, registry.ALL_ACCESS)
 	if err != nil {
@@ -55,7 +39,6 @@ func cleanupTestKey() error {
 
 func TestRegLoadKeyMissing(t *testing.T) {
 	// Setup
-	elog = new(testCabbieLog)
 	expected := newSettings()
 	testconfig := newSettings()
 	// End Setup
@@ -69,7 +52,6 @@ func TestRegLoadKeyMissing(t *testing.T) {
 
 func TestRegLoadKeyEmpty(t *testing.T) {
 	// Setup
-	elog = new(testCabbieLog)
 	if err := createTestKeys(); err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +83,6 @@ func TestRegLoadRequiredCategories(t *testing.T) {
 	k.Close()
 	defer cleanupTestKey()
 
-	elog = new(testCabbieLog)
 	expected := newSettings()
 	expected.RequiredCategories = rc
 	testconfig := newSettings()

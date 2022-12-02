@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,22 +20,6 @@ import (
 	"github.com/google/cabbie/search"
 	"github.com/google/go-cmp/cmp"
 )
-
-type testInstallLog struct {
-}
-
-func (f *testInstallLog) Info(id uint32, msg string) error {
-	return nil
-}
-func (f *testInstallLog) Error(id uint32, msg string) error {
-	return nil
-}
-func (f *testInstallLog) Warning(id uint32, msg string) error {
-	return nil
-}
-func (f *testInstallLog) Close() error {
-	return nil
-}
 
 func newFakeConfig() *Settings {
 	return &Settings{RequiredCategories: categoryDefaults}
@@ -95,7 +79,6 @@ func TestGetCriteria(t *testing.T) {
 		{installCmd{kbs: "KB1234567"}, string(search.BasicSearch), nil},
 		{installCmd{}, string(search.BasicSearch), categoryDefaults},
 	} {
-		elog = new(testInstallLog)
 		config = newFakeConfig()
 		oc, orc := tt.i.criteria()
 		if !(strings.Contains(oc, tt.outcriteria)) {

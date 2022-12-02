@@ -34,17 +34,18 @@ import (
 	"github.com/google/cabbie/cablib"
 	"github.com/google/cabbie/enforcement"
 	"github.com/google/cabbie/servicemgr"
+	"github.com/google/deck/backends/eventlog"
+	"github.com/google/deck/backends/logger"
+	"github.com/google/deck"
 	"github.com/google/aukera/client"
 	"github.com/scjalliance/comshim"
 	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows/svc/debug"
-	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc"
 	"github.com/google/subcommands"
 )
 
 var (
-	elog             debug.Log
 	runInDebug       = flag.Bool("debug", false, "Run in debug mode")
 	config           = new(Settings)
 	categoryDefaults = []string{"Critical Updates", "Definition Updates", "Security Updates"}
@@ -65,6 +66,8 @@ var (
 	enforcementWatcherFailures = new(metrics.Int)
 	installHResult             = new(metrics.String)
 	searchHResult              = new(metrics.String)
+
+	eventID = eventlog.EventID
 )
 
 // Settings contains configurable options.
@@ -151,15 +154,14 @@ func (s *Settings) regLoad(path string) error {
 	if a, _, err := k.GetStringValue("AukeraName"); err == nil {
 		s.AukeraName = a
 	} else {
-		elog.Info(cablib.EvtErrConfig,
-			fmt.Sprintf("AukeraName not found in registry, using default Name:\n%v", s.AukeraName))
+		deck.InfofA(
+			"AukeraName not found in registry, using default Name:\n%v", s.AukeraName).With(eventID(cablib.EvtErrConfig)).Go()
 	}
 
 	if m, _, err := k.GetStringsValue("RequiredCategories"); err == nil {
 		s.RequiredCategories = m
 	} else {
-		elog.Info(cablib.EvtErrConfig,
-			fmt.Sprintf("RequiredCategories not found in registry, using default categories:\n%v", s.RequiredCategories))
+		deck.InfofA("RequiredCategories not found in registry, using default categories:\n%v", s.RequiredCategories).With(eventID(cablib.EvtErrConfig)).Go()
 	}
 
 	if i, _, err := k.GetIntegerValue("EnableThirdParty"); err == nil {
@@ -200,7 +202,7 @@ func (s *Settings) regLoad(path string) error {
 type winSvc struct{}
 
 func startService(isDebug bool) error {
-	elog.Info(cablib.EvtServiceStarting, fmt.Sprintf("Starting %s service.", cablib.SvcName))
+	deck.InfofA("Starting %s service.", cablib.SvcName).With(eventID(cablib.EvtServiceStarting)).Go()
 	run := svc.Run
 	if isDebug {
 		run = debug.Run
@@ -208,7 +210,7 @@ func startService(isDebug bool) error {
 	if err := run(cablib.SvcName, winSvc{}); err != nil {
 		return fmt.Errorf("%s service failed. %v", cablib.SvcName, err)
 	}
-	elog.Info(cablib.EvtServiceStopped, fmt.Sprintf("%s service stopped.", cablib.SvcName))
+	deck.InfofA("%s service stopped.", cablib.SvcName).With(eventID(cablib.EvtServiceStopped)).Go()
 	return nil
 }
 
@@ -271,12 +273,12 @@ func initMetrics() error {
 func setRebootMetric() {
 	rbr, err := cablib.RebootRequired()
 	if err != nil {
-		elog.Error(cablib.EvtErrMetricReport, err.Error())
+		deck.ErrorA(err).With(eventID(cablib.EvtErrMetricReport)).Go()
 		return
 	}
 
 	if err := rebootRequired.Set(rbr); err != nil {
-		elog.Error(cablib.EvtErrMetricReport, err.Error())
+		deck.ErrorA(err).With(eventID(cablib.EvtErrMetricReport)).Go()
 	}
 
 	if rbr {
@@ -290,20 +292,20 @@ func enforce() error {
 		return fmt.Errorf("error retrieving required updates: %v", err)
 	}
 	if err := enforcedUpdateCount.Set(int64(len(updates.Required))); err != nil {
-		elog.Error(cablib.EvtErrMetricReport, fmt.Sprintf("Error posting metric:\n%v", err))
+		deck.ErrorfA("Error posting metric:\n%v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
 	}
 	var failures error
 	if len(updates.Required) > 0 {
 		i := installCmd{kbs: strings.Join(updates.Required, ",")}
 		if err := i.installUpdates(); err != nil {
 			failures = fmt.Errorf("error enforcing required updates: %v", err)
-			elog.Error(cablib.EvtErrInstallFailure, failures.Error())
+			deck.ErrorA(failures).With(eventID(cablib.EvtErrInstallFailure)).Go()
 		}
 	}
 	if len(updates.Hidden) > 0 {
 		if err := hide(NewKBSetFromSlice(updates.Hidden)); err != nil {
 			failures = fmt.Errorf("error hiding updates: %v", err)
-			elog.Error(cablib.EvtErrHide, failures.Error())
+			deck.ErrorA(failures).With(eventID(cablib.EvtErrHide)).Go()
 		}
 	}
 	excludedDrivers.set(updates.ExcludedDrivers)
@@ -312,12 +314,12 @@ func enforce() error {
 
 func runMainLoop() error {
 	if err := notification.CleanNotifications(cablib.SvcName); err != nil {
-		elog.Error(cablib.EvtErrNotifications, fmt.Sprintf("Error clearing old notifications:\n%v", err))
+		deck.ErrorfA("Error clearing old notifications:\n%v", err).With(eventID(cablib.EvtErrNotifications)).Go()
 	}
 
 	if config.EnableThirdParty == 1 {
 		if err := enableThirdPartyUpdates(); err != nil {
-			elog.Error(cablib.EvtErrMisc, fmt.Sprintf("Error configuring third party updates:\n%v", err))
+			deck.ErrorfA("Error configuring third party updates:\n%v", err).With(eventID(cablib.EvtErrMisc)).Go()
 		}
 	}
 
@@ -332,20 +334,20 @@ func runMainLoop() error {
 	go func() {
 		for {
 			if err := enforcement.Watcher(enforcedFile); err == nil {
-				elog.Error(cablib.EvtErrEnforcement, fmt.Sprintf("failed to initialize enforcement config watcher; relying on default enforcement schedule: %v", err))
+				deck.ErrorfA("failed to initialize enforcement config watcher; relying on default enforcement schedule: %v", err).With(eventID(cablib.EvtErrEnforcement)).Go()
 			}
 			if err := enforcementWatcherFailures.Increment(); err != nil {
-				elog.Error(cablib.EvtErrMetricReport, fmt.Sprintf("unable to increment enforcementWatcherFailures metric: %v", err))
+				deck.ErrorfA("unable to increment enforcementWatcherFailures metric: %v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
 			}
 			time.Sleep(15 * time.Minute)
 		}
 	}()
 
 	if config.AukeraEnabled == 1 {
-		elog.Info(cablib.EvtMisc, "Host configured to use Aukera. Ignoring default timer.")
+		deck.InfoA("Host configured to use Aukera. Ignoring default timer.").With(eventID(cablib.EvtMisc)).Go()
 		t.Default.Stop()
 	} else {
-		elog.Info(cablib.EvtMisc, "Using default update interval.")
+		deck.InfoA("Using default update interval.").With(eventID(cablib.EvtMisc)).Go()
 		t.Aukera.Stop()
 	}
 
@@ -363,119 +365,118 @@ func runMainLoop() error {
 			i := installCmd{Interactive: false}
 			err := i.installUpdates()
 			if e := updateInstallSuccess.Set(err == nil); e != nil {
-				elog.Error(cablib.EvtErrMetricReport, fmt.Sprintf("Error posting metric:\n%v", e))
+				deck.ErrorfA("Error posting metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
 			}
 			setRebootMetric()
 			if err != nil {
-				elog.Error(cablib.EvtErrInstallFailure, fmt.Sprintf("Error installing system updates:\n%v", err))
+				deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 			}
 		case <-t.Aukera.C:
 			s, err := client.Label(int(config.AukeraPort), config.AukeraName)
 			if err != nil {
-				elog.Error(cablib.EvtErrMaintWindow, fmt.Sprintf("Error getting maintenance window %q with error:\n%v", config.AukeraName, err))
+				deck.ErrorfA("Error getting maintenance window %q with error:\n%v", config.AukeraName, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
 				break
 			}
 			if *runInDebug {
 				fmt.Printf("Cabbie maintenance window schedule:\n%+v", s)
 			}
 			if len(s) == 0 {
-				elog.Error(cablib.EvtErrMaintWindow,
-					fmt.Sprintf("Aukera maintenance window label %q not found, skipping update check...", config.AukeraName))
+				deck.ErrorfA("Aukera maintenance window label %q not found, skipping update check...", config.AukeraName).With(eventID(cablib.EvtErrMaintWindow)).Go()
 				break
 			}
 			if s[0].State == "open" {
 				i := installCmd{Interactive: false}
 				err := i.installUpdates()
 				if e := updateInstallSuccess.Set(err == nil); e != nil {
-					elog.Error(cablib.EvtErrMetricReport, fmt.Sprintf("Error posting updateInstallSuccess metric:\n%v", e))
+					deck.ErrorfA("Error posting updateInstallSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
 				}
 				setRebootMetric()
 				if err != nil {
-					elog.Error(cablib.EvtErrInstallFailure, fmt.Sprintf("Error installing system updates:\n%v", err))
+					deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 				}
 			}
 		case <-t.List.C:
 			setRebootMetric()
 			requiredUpdates, optionalUpdates, err := listUpdates(true)
 			if e := listUpdateSuccess.Set(err == nil); e != nil {
-				elog.Error(cablib.EvtErrMetricReport, fmt.Sprintf("Error posting listUpdateSuccess metric:\n%v", e))
+				deck.ErrorfA("Error posting listUpdateSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
 			}
 			if err != nil {
-				elog.Error(cablib.EvtErrQueryFailure, fmt.Sprintf("Error getting the list of updates:\n%v", err))
+				deck.ErrorfA("Error getting the list of updates:\n%v", err).With(eventID(cablib.EvtErrQueryFailure)).Go()
 				break
 			}
 			if err := requiredUpdateCount.Set(int64(len(requiredUpdates))); err != nil {
-				elog.Error(cablib.EvtErrMetricReport, fmt.Sprintf("Error posting requiredUpdateCount metric:\n%v", err))
+				deck.ErrorfA("Error posting requiredUpdateCount metric:\n%v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
 			}
 
 			if len(requiredUpdates) == 0 {
-				elog.Info(cablib.EvtNoUpdates, "No required updates needed to install.")
+				deck.InfoA("No required updates needed to install.").With(eventID(cablib.EvtNoUpdates)).Go()
 				break
 			}
 
-			elog.Info(cablib.EvtUpdatesFound, fmt.Sprintf("Found %d required updates.\nRequired updates:\n%s\nOptional updates:\n%s",
+			deck.InfofA("Found %d required updates.\nRequired updates:\n%s\nOptional updates:\n%s",
 				len(requiredUpdates),
 				strings.Join(requiredUpdates, "\n\n"),
-				strings.Join(optionalUpdates, "\n\n")),
-			)
+				strings.Join(optionalUpdates, "\n\n"),
+			).With(eventID(cablib.EvtUpdatesFound)).Go()
 
 			if config.NotifyAvailable == 1 {
 				if err := notification.NewAvailableUpdateMessage().Push(); err != nil {
-					elog.Error(cablib.EvtErrNotifications, fmt.Sprintf("Failed to create notification:\n%v", err))
+					deck.ErrorfA("Failed to create notification:\n%v", err).With(eventID(cablib.EvtErrNotifications)).Go()
 				}
 			}
 
 			if config.Deadline != 0 {
 				i := installCmd{Interactive: false, deadlineOnly: true}
 				if err := i.installUpdates(); err != nil {
-					elog.Error(cablib.EvtErrInstallFailure, fmt.Sprintf("Error installing system updates:\n%v", err))
+					deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 				}
 			}
 		case <-t.Virus.C:
 			i := installCmd{Interactive: false, virusDef: true}
 			err := i.installUpdates()
 			if e := virusUpdateSuccess.Set(err == nil); e != nil {
-				elog.Error(cablib.EvtErrMetricReport, fmt.Sprintf("Error posting virusUpdateSuccess metric:\n%v", err))
+				deck.ErrorfA("Error posting virusUpdateSuccess metric:\n%v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
 			}
 			if err != nil {
-				elog.Error(cablib.EvtErrInstallFailure, fmt.Sprintf("Error installing virus definitions:\n%v", err))
+				deck.ErrorfA("Error installing virus definitions:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 				break
 			}
 		case <-t.Driver.C:
 			i := installCmd{Interactive: false, drivers: true}
 			err := i.installUpdates()
 			if e := driverUpdateSuccess.Set(err == nil); e != nil {
-				elog.Error(cablib.EvtErrMetricReport, fmt.Sprintf("Error posting driverUpdateSuccess metric:\n%v", e))
+				deck.ErrorfA("Error posting driverUpdateSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
 			}
 			if err != nil {
-				elog.Error(cablib.EvtErrInstallFailure, fmt.Sprintf("Error installing drivers:\n%v", err))
+				deck.ErrorfA("Error installing drivers:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 			}
 			setRebootMetric()
 		case file := <-enforcedFile:
-			elog.Info(cablib.EvtEnforcementChange, fmt.Sprintf("Enforcement triggered by change in file %q.", file))
+			deck.InfofA("Enforcement triggered by change in file %q.", file).With(eventID(cablib.EvtEnforcementChange)).Go()
 			if err := enforce(); err != nil {
-				elog.Error(cablib.EvtErrInstallFailure, fmt.Sprintf("Error enforcing one or more updates:\n%v", err))
+				deck.ErrorfA("Error enforcing one or more updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 			}
 		case <-t.Enforcement.C:
 			if err := enforce(); err != nil {
-				elog.Error(cablib.EvtErrInstallFailure, fmt.Sprintf("Error enforcing one or more updates:\n%v", err))
+				deck.ErrorfA("Error enforcing one or more updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 			}
 		case <-rebootEvent:
 			go func() {
 				if !(rebootActive) {
 					rebootActive = true
-					elog.Info(cablib.EvtReboot, "Reboot initiated...")
+					deck.InfoA("Reboot initiated...").With(eventID(cablib.EvtReboot)).Go()
 					t, err := cablib.RebootTime()
 					if err != nil {
-						elog.Error(cablib.EvtErrPowerMgmt, fmt.Sprintf("Error getting reboot time: %v", err))
+						deck.ErrorfA("Error getting reboot time: %v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
 						return
 					}
 					if t.IsZero() {
-						elog.Info(cablib.EvtMisc, "Zero time returned, no reboot defined.")
+						deck.InfoA("Zero time returned, no reboot defined.").With(eventID(cablib.EvtMisc)).Go()
 						return
 					}
 					if err := cablib.SystemReboot(t); err != nil {
-						elog.Error(cablib.EvtErrPowerMgmt, fmt.Sprintf("SystemReboot() error:\n%v", err))
+						deck.ErrorfA("SystemReboot() error:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
 					}
 					rebootActive = false
 				}
@@ -494,7 +495,7 @@ func (m winSvc) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<
 	go func() {
 		errch <- runMainLoop()
 	}()
-	elog.Info(cablib.EvtServiceStarted, "Service started.")
+	deck.InfoA("Service started.").With(eventID(cablib.EvtServiceStarted)).Go()
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 
 loop:
@@ -502,7 +503,7 @@ loop:
 		select {
 		// Watch for the cabbie goroutine to fail for some reason.
 		case err := <-errch:
-			elog.Error(cablib.EvtErrService, fmt.Sprintf("Cabbie goroutine has failed: %v", err))
+			deck.ErrorfA("Cabbie goroutine has failed: %v", err).With(eventID(cablib.EvtErrService)).Go()
 			break loop
 		// Watch for service signals.
 		case c := <-r:
@@ -512,7 +513,7 @@ loop:
 			case svc.Stop, svc.Shutdown:
 				break loop
 			default:
-				elog.Error(cablib.EvtErrService, fmt.Sprintf("Unexpected control request #%d", c))
+				deck.ErrorfA("Unexpected control request #%d", c).With(eventID(cablib.EvtErrService)).Go()
 			}
 		}
 	}
@@ -544,20 +545,21 @@ func main() {
 	var err error
 
 	if *runInDebug {
-		elog = debug.New(cablib.LogSrcName)
+		deck.Add(logger.Init(os.Stdout, 0))
 	} else {
-		elog, err = eventlog.Open(cablib.LogSrcName)
+		evt, err := eventlog.Init(cablib.LogSrcName)
 		if err != nil {
-			fmt.Printf("Failed to create event: %v", err)
+			fmt.Println(err)
 			os.Exit(2)
 		}
+		deck.Add(evt)
 	}
-	defer elog.Close()
+	defer deck.Close()
 
 	// Load Cabbie config settings.
 	config = newSettings()
 	if err = config.regLoad(cablib.RegPath); err != nil {
-		elog.Error(cablib.EvtErrConfig, fmt.Sprintf("Failed to load Cabbie config, using defaults:\n%v\nError:%v", config, err))
+		deck.ErrorfA("Failed to load Cabbie config, using defaults:\n%v\nError:%v", config, err).With(eventID(cablib.EvtErrConfig)).Go()
 	}
 
 	// If a profiling port is specified, start an HTTP server
@@ -569,13 +571,13 @@ func main() {
 
 	isSvc, err := svc.IsWindowsService()
 	if err != nil {
-		elog.Error(cablib.EvtErrMisc, fmt.Sprintf("Failed to determine if we are running in an interactive session: %v", err))
+		deck.ErrorfA("Failed to determine if we are running in an interactive session: %v", err).With(eventID(cablib.EvtErrMisc)).Go()
 		os.Exit(2)
 	}
 
 	// Initialize metrics.
 	if err := initMetrics(); err != nil {
-		elog.Error(cablib.EvtErrMetricReport, err.Error())
+		deck.ErrorA(err).With(eventID(cablib.EvtErrMetricReport)).Go()
 	}
 
 	comshim.Add(1)
@@ -584,7 +586,7 @@ func main() {
 	// Running as Service.
 	if isSvc && len(os.Args) == 1 {
 		if err := startService(*runInDebug); err != nil {
-			elog.Error(cablib.EvtErrService, fmt.Sprintf("Failed to run service: %v", err))
+			deck.ErrorfA("Failed to run service: %v", err).With(eventID(cablib.EvtErrService)).Go()
 			os.Exit(2)
 		}
 		os.Exit(0)
@@ -605,7 +607,7 @@ func main() {
 
 	if *runInDebug {
 		if err := startService(true); err != nil {
-			elog.Error(cablib.EvtErrService, fmt.Sprintf("Failed to run service in debug mode: %v", err))
+			deck.ErrorfA("Failed to run service in debug mode: %v", err).With(eventID(cablib.EvtErrService)).Go()
 			os.Exit(2)
 		}
 	}

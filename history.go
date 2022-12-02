@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,6 +24,7 @@ import (
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatehistory"
+	"github.com/google/deck"
 	"github.com/google/subcommands"
 )
 
@@ -38,11 +39,11 @@ func (historyCmd) Usage() string {
 }
 func (c *historyCmd) SetFlags(f *flag.FlagSet) {}
 
-func (c *historyCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+func (c *historyCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subcommands.ExitStatus {
 	h, err := history()
 	if err != nil {
 		fmt.Printf("Failed to get update history: %s", err)
-		elog.Error(cablib.EvtErrHistory, fmt.Sprintf("Failed to get Update history: %s", err))
+		deck.ErrorfA("Failed to get Update history: %s", err).With(eventID(cablib.EvtErrHistory)).Go()
 		return subcommands.ExitFailure
 	}
 	defer h.Close()
@@ -67,6 +68,6 @@ func history() (*updatehistory.History, error) {
 	}
 	defer searcher.Close()
 
-	elog.Info(cablib.EvtHistory, "Collecting installed updates...")
+	deck.InfoA("Collecting installed updates...").With(eventID(cablib.EvtHistory)).Go()
 	return updatehistory.Get(searcher)
 }

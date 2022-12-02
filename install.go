@@ -30,6 +30,7 @@ import (
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatecollection"
+	"github.com/google/deck"
 	"github.com/google/subcommands"
 	"github.com/google/glazier/go/helpers"
 )
@@ -80,14 +81,14 @@ func vetFlags(i installCmd) error {
 	return nil
 }
 
-func (i installCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+func (i installCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subcommands.ExitStatus {
 	if err := vetFlags(i); err != nil {
 		return subcommands.ExitUsageError
 	}
 
 	if err := i.installUpdates(); err != nil {
 		fmt.Printf("Failed to install updates: %v", err)
-		elog.Error(cablib.EvtErrInstallFailure, fmt.Sprintf("Failed to install updates: %v", err))
+		deck.ErrorfA("Failed to install updates: %v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 		return subcommands.ExitFailure
 	}
 
@@ -109,39 +110,39 @@ func (i *installCmd) criteria() (string, []string) {
 	switch {
 	case i.all:
 		c = search.BasicSearch
-		elog.Info(cablib.EvtSearch, fmt.Sprintf("Starting search for all updates: %s", c))
+		deck.InfofA("Starting search for all updates: %s", c).With(eventID(cablib.EvtSearch)).Go()
 	case i.drivers:
 		c = "Type='Driver'"
 		rc = append(rc, "Drivers")
-		elog.Info(cablib.EvtSearch, fmt.Sprintf("Starting search for updated drivers: %s", c))
+		deck.InfofA("Starting search for updated drivers: %s", c).With(eventID(cablib.EvtSearch)).Go()
 	case i.virusDef:
 		c = fmt.Sprintf("%s AND CategoryIDs contains '%s'", search.BasicSearch, search.DefinitionUpdates)
 		rc = append(rc, "Definition Updates")
-		elog.Info(cablib.EvtSearch, fmt.Sprintf("Starting search for virus definitions:\n%s", c))
+		deck.InfofA("Starting search for virus definitions:\n%s", c).With(eventID(cablib.EvtSearch)).Go()
 	case i.kbs != "":
 		c = search.BasicSearch
-		elog.Info(cablib.EvtSearch, fmt.Sprintf("Starting search for KB's %q:\n%s", i.kbs, c))
+		deck.InfofA("Starting search for KB's %q:\n%s", i.kbs, c).With(eventID(cablib.EvtSearch)).Go()
 	default:
 		c = search.BasicSearch
 		rc = config.RequiredCategories
-		elog.Info(cablib.EvtSearch, fmt.Sprintf("Starting search for general updates: %s", c))
+		deck.InfofA("Starting search for general updates: %s", c).With(eventID(cablib.EvtSearch)).Go()
 	}
 	return c, rc
 }
 
 func installingMessage() {
-	elog.Info(cablib.EvtInstall, "Cabbie is installing new updates.")
+	deck.InfoA("Cabbie is installing new updates.").With(eventID(cablib.EvtInstall)).Go()
 
 	if err := notification.NewInstallingMessage().Push(); err != nil {
-		elog.Error(cablib.EvtErrNotifications, fmt.Sprintf("Failed to create notification:\n%v", err))
+		deck.ErrorfA("Failed to create notification:\n%v", err).With(eventID(cablib.EvtErrNotifications)).Go()
 	}
 }
 
 func rebootMessage(seconds int) {
-	elog.Info(cablib.EvtInstallSuccess, "Updates have been installed, please reboot to complete the installation...")
+	deck.InfoA("Updates have been installed, please reboot to complete the installation...").With(eventID(cablib.EvtInstallSuccess)).Go()
 
 	if err := notification.NewRebootMessage(seconds).Push(); err != nil {
-		elog.Error(cablib.EvtErrNotifications, fmt.Sprintf("Failed to create notification:\n%v", err))
+		deck.ErrorfA("Failed to create notification:\n%v", err).With(eventID(cablib.EvtErrNotifications)).Go()
 	}
 }
 
@@ -239,7 +240,7 @@ func (i *installCmd) installUpdates() error {
 
 	uc, err := q.QueryUpdates()
 	if er := searchHResult.Set(q.SearchHResult); er != nil {
-		elog.Error(cablib.EvtErrMetricReport, fmt.Sprintf("Error posting metric:\n%v", er))
+		deck.ErrorfA("Error posting metric:\n%v", er).With(eventID(cablib.EvtErrMetricReport)).Go()
 	}
 	if err != nil {
 		return fmt.Errorf("error encountered when attempting to query for updates: %v", err)
@@ -247,10 +248,10 @@ func (i *installCmd) installUpdates() error {
 	defer uc.Close()
 
 	if len(uc.Updates) == 0 {
-		elog.Info(cablib.EvtNoUpdates, "No updates found to install.")
+		deck.InfoA("No updates found to install.").With(eventID(cablib.EvtNoUpdates)).Go()
 		return nil
 	}
-	elog.Info(cablib.EvtUpdatesFound, fmt.Sprintf("Updates Found:\n%s", strings.Join(uc.Titles(), "\n\n")))
+	deck.InfofA("Updates Found:\n%s", strings.Join(uc.Titles(), "\n\n")).With(eventID(cablib.EvtUpdatesFound)).Go()
 
 	installMsgPopped := i.virusDef
 	installingMinOneUpdate := false
@@ -258,26 +259,26 @@ func (i *installCmd) installUpdates() error {
 	kbs := NewKBSet(i.kbs)
 	for _, u := range uc.Updates {
 		if !(u.InCategories(rc)) {
-			elog.Info(cablib.EvtUpdateSkip, fmt.Sprintf("Skipping update %s.\nRequiredClassifications:\n%v\nUpdate classifications:\n%v",
+			deck.InfofA("Skipping update %s.\nRequiredClassifications:\n%v\nUpdate classifications:\n%v",
 				u.Title,
 				rc,
-				u.Categories))
+				u.Categories).With(eventID(cablib.EvtUpdateSkip)).Go()
 			continue
 		}
 
 		if !(u.EulaAccepted) {
-			elog.Info(cablib.EvtMisc, fmt.Sprintf("Accepting EULA for update: %s", u.Title))
+			deck.InfofA("Accepting EULA for update: %s", u.Title).With(eventID(cablib.EvtMisc)).Go()
 			if err := u.AcceptEula(); err != nil {
-				elog.Error(cablib.EvtErrMisc, fmt.Sprintf("Failed to accept EULA for update %s:\n%s", u.Title, err))
+				deck.ErrorfA("Failed to accept EULA for update %s:\n%s", u.Title, err).With(eventID(cablib.EvtErrMisc)).Go()
 			}
 		}
 
 		if kbs.Size() > 0 {
 			if !kbs.Search(u.KBArticleIDs) {
-				elog.Info(cablib.EvtUpdateSkip, fmt.Sprintf("Skipping update %s.\nRequired KBs:\n%s\nUpdate KBs:\n%v",
+				deck.InfofA("Skipping update %s.\nRequired KBs:\n%s\nUpdate KBs:\n%v",
 					u.Title,
 					kbs,
-					u.KBArticleIDs))
+					u.KBArticleIDs).With(eventID(cablib.EvtUpdateSkip)).Go()
 				continue
 			}
 		}
@@ -285,18 +286,18 @@ func (i *installCmd) installUpdates() error {
 			deadline := time.Duration(config.Deadline) * 24 * time.Hour
 			pastDeadline := time.Now().After(u.LastDeploymentChangeTime.Add(deadline))
 			if !pastDeadline {
-				elog.Info(cablib.EvtUpdateSkip,
-					fmt.Sprintf("Skipping update %s.\nUpdate deployed on %v has not reached the %d day threshold.",
-						u.Title,
-						u.LastDeploymentChangeTime,
-						config.Deadline))
+				deck.InfofA(
+					"Skipping update %s.\nUpdate deployed on %v has not reached the %d day threshold.",
+					u.Title,
+					u.LastDeploymentChangeTime,
+					config.Deadline).With(eventID(cablib.EvtUpdateSkip)).Go()
 				continue
 			}
 		}
 
 		c, err := updatecollection.New()
 		if err != nil {
-			elog.Error(cablib.EvtErrMisc, fmt.Sprintf("Failed to create collection: %v", err))
+			deck.ErrorfA("Failed to create collection: %v", err).With(eventID(cablib.EvtErrMisc)).Go()
 			continue
 		}
 		c.Add(u.Item)
@@ -307,52 +308,52 @@ func (i *installCmd) installUpdates() error {
 			ps := filepath.Join(cablib.CabbiePath, "PreUpdate.ps1")
 			exist, err := helpers.PathExists(ps)
 			if err != nil {
-				elog.Error(cablib.EvtErrUpdateScript, fmt.Sprintf("PreUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PreUpdate.ps1", err))
+				deck.ErrorfA("PreUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PreUpdate.ps1", err).With(eventID(cablib.EvtErrUpdateScript)).Go()
 			} else if exist {
 				if _, err := helpers.ExecWithVerify(ps, nil, &config.ScriptTimeout, nil); err != nil {
-					elog.Error(cablib.EvtErrUpdateScript, fmt.Sprintf("PreUpdateScript: error running script:\n%v", err))
+					deck.ErrorfA("PreUpdateScript: error running script:\n%v", err).With(eventID(cablib.EvtErrUpdateScript)).Go()
 				}
 			}
 			installingMinOneUpdate = true
 		}
-		elog.Info(cablib.EvtDownload, fmt.Sprintf("Downloading Update:\n%v", u))
+		deck.InfofA("Downloading Update:\n%v", u).With(eventID(cablib.EvtDownload)).Go()
 
 		rc, err := downloadCollection(s, c)
 		if err != nil {
-			elog.Error(cablib.EvtErrMisc, err.Error())
+			deck.ErrorA(err).With(eventID(cablib.EvtErrMisc)).Go()
 			c.Close()
 			continue
 		}
 		if rc == 2 {
-			elog.Info(cablib.EvtDownload, fmt.Sprintf("Successfully downloaded update:\n %s", u.Title))
+			deck.InfofA("Successfully downloaded update:\n %s", u.Title).With(eventID(cablib.EvtDownload)).Go()
 		} else {
 
-			elog.Error(cablib.EvtErrDownloadFailure, fmt.Sprintf("Failed to download update:\n %s\n ReturnCode: %d", u.Title, rc))
+			deck.ErrorfA("Failed to download update:\n %s\n ReturnCode: %d", u.Title, rc).With(eventID(cablib.EvtErrDownloadFailure)).Go()
 			c.Close()
 			continue
 		}
 
-		elog.Info(cablib.EvtInstall, fmt.Sprintf("Installing Update:\n%v", u))
+		deck.InfofA("Installing Update:\n%v", u).With(eventID(cablib.EvtInstall)).Go()
 
 		rsp, err := installCollection(s, c)
 		if err != nil {
-			elog.Error(cablib.EvtErrMisc, err.Error())
+			deck.ErrorA(err).With(eventID(cablib.EvtErrMisc)).Go()
 			c.Close()
 			continue
 		}
 
 		if err := installHResult.Set(rsp.hResult); err != nil {
-			elog.Error(cablib.EvtErrMetricReport, fmt.Sprintf("Error posting metric:\n%v", err))
+			deck.ErrorfA("Error posting metric:\n%v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
 		}
 		if rsp.resultCode == 2 {
-			elog.Info(cablib.EvtInstall, fmt.Sprintf("Successfully installed update:\n%s\nHResult Code: %s", u.Title, rsp.hResult))
+			deck.InfofA("Successfully installed update:\n%s\nHResult Code: %s", u.Title, rsp.hResult).With(eventID(cablib.EvtInstall)).Go()
 		} else {
-			elog.Error(cablib.EvtErrInstallFailure, fmt.Sprintf("Failed to install update:\n%s\nReturnCode: %d\nHResult Code: %s", u.Title, rsp.resultCode, rsp.hResult))
+			deck.ErrorfA("Failed to install update:\n%s\nReturnCode: %d\nHResult Code: %s", u.Title, rsp.resultCode, rsp.hResult).With(eventID(cablib.EvtErrInstallFailure)).Go()
 			c.Close()
 			continue
 		}
 
-		elog.Info(cablib.EvtRebootRequired, fmt.Sprintf("Install Reboot Required: %t", rsp.rebootRequired))
+		deck.InfofA("Install Reboot Required: %t", rsp.rebootRequired).With(eventID(cablib.EvtRebootRequired)).Go()
 		if !rebootRequired {
 			rebootRequired = rsp.rebootRequired
 		}
@@ -363,10 +364,10 @@ func (i *installCmd) installUpdates() error {
 		ps := filepath.Join(cablib.CabbiePath, "PostUpdate.ps1")
 		exist, err := helpers.PathExists(ps)
 		if err != nil {
-			elog.Error(cablib.EvtErrUpdateScript, fmt.Sprintf("PostUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PostUpdate.ps1", err))
+			deck.ErrorfA("PostUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PostUpdate.ps1", err).With(eventID(cablib.EvtErrUpdateScript)).Go()
 		} else if exist {
 			if _, err := helpers.ExecWithVerify(ps, nil, &config.ScriptTimeout, nil); err != nil {
-				elog.Error(cablib.EvtErrUpdateScript, fmt.Sprintf("PostUpdateScript: error executing script:\n%v", err))
+				deck.ErrorfA("PostUpdateScript: error executing script:\n%v", err).With(eventID(cablib.EvtErrUpdateScript)).Go()
 			}
 		}
 	}
@@ -374,7 +375,7 @@ func (i *installCmd) installUpdates() error {
 	if rebootRequired {
 		rebootMessage(int(config.RebootDelay))
 		if err := cablib.SetRebootTime(config.RebootDelay); err != nil {
-			elog.Error(cablib.EvtErrPowerMgmt, fmt.Sprintf("Failed to run reboot command:\n%v", err))
+			deck.ErrorfA("Failed to run reboot command:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
 		}
 		rebootEvent <- rebootRequired
 	}

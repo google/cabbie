@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,6 +24,7 @@ import (
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatecollection"
+	"github.com/google/deck"
 	"github.com/google/subcommands"
 )
 
@@ -44,7 +45,7 @@ func (c *hideCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.unhide, "unhide", false, "mark a hidden update as visible.")
 }
 
-func (c hideCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+func (c hideCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subcommands.ExitStatus {
 	kbs := NewKBSet(c.kbs)
 
 	if kbs.Size() < 1 {
@@ -55,7 +56,7 @@ func (c hideCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interface{
 	if c.unhide {
 		if err := unhide(kbs); err != nil {
 			fmt.Println(err)
-			elog.Error(cablib.EvtErrUnhide, fmt.Sprintf("Error unhiding an update: %v", err))
+			deck.ErrorfA("Error unhiding an update: %v", err).With(eventID(cablib.EvtErrUnhide)).Go()
 		}
 		return subcommands.ExitSuccess
 	}
@@ -94,9 +95,9 @@ func unhide(kbs KBSet) error {
 
 	for _, u := range uc.Updates {
 		if kbs.Search(u.KBArticleIDs) {
-			elog.Info(cablib.EvtUnhide, fmt.Sprintf("Unhiding update:\n%s", u.Title))
+			deck.InfofA("Unhiding update:\n%s", u.Title).With(eventID(cablib.EvtUnhide)).Go()
 			if err := u.UnHide(); err != nil {
-				elog.Error(cablib.EvtErrUnhide, fmt.Sprintf("Failed to unhide update %s:\n %s", u.Title, err))
+				deck.ErrorfA("Failed to unhide update %s:\n %s", u.Title, err).With(eventID(cablib.EvtErrUnhide)).Go()
 			}
 		}
 	}
@@ -114,9 +115,9 @@ func hide(kbs KBSet) error {
 
 	for _, u := range uc.Updates {
 		if kbs.Search(u.KBArticleIDs) {
-			elog.Info(cablib.EvtHide, fmt.Sprintf("Hiding update:\n%s", u.Title))
+			deck.InfofA("Hiding update:\n%s", u.Title).With(eventID(cablib.EvtHide)).Go()
 			if err := u.Hide(); err != nil {
-				elog.Error(cablib.EvtErrHide, fmt.Sprintf("Failed to hide update %s:\n %s", u.Title, err))
+				deck.ErrorfA("Failed to hide update %s:\n %s", u.Title, err).With(eventID(cablib.EvtErrHide)).Go()
 			}
 		}
 	}

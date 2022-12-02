@@ -22,6 +22,7 @@ import (
 
 	"flag"
 	"github.com/google/cabbie/cablib"
+	"github.com/google/deck"
 	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc/mgr"
@@ -46,7 +47,7 @@ func (c *serviceCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.uninstall, "uninstall", false, "Uninstall the Cabbie service.")
 }
 
-func (c serviceCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (c serviceCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	rc := subcommands.ExitSuccess
 
 	if c.install && c.uninstall {
@@ -57,20 +58,20 @@ func (c serviceCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	if c.install {
 		if err := installService(cablib.SvcName, cablib.SvcName+" Update Manager"); err != nil {
 			msg := fmt.Sprintf("Failed to install service: %v\n", err)
-			elog.Error(cablib.EvtErrSvcInstall, msg)
+			deck.ErrorA(msg).With(eventID(cablib.EvtErrSvcInstall)).Go()
 			fmt.Println(msg)
 			rc = subcommands.ExitFailure
 		}
-		elog.Info(cablib.EvtSvcInstall, "Successfully installed Cabbie service.")
+		deck.InfoA("Successfully installed Cabbie service.").With(eventID(cablib.EvtSvcInstall)).Go()
 	}
 	if c.uninstall {
 		if err := removeService(cablib.SvcName); err != nil {
 			msg := fmt.Sprintf("Failed to uninstall service: %v\n", err)
-			elog.Error(cablib.EvtErrSvcInstall, msg)
+			deck.ErrorA(msg).With(eventID(cablib.EvtErrSvcInstall)).Go()
 			fmt.Println(msg)
 			rc = subcommands.ExitFailure
 		}
-		elog.Info(cablib.EvtSvcInstall, "Successfully uninstalled Cabbie service.")
+		deck.InfoA("Successfully uninstalled Cabbie service.").With(eventID(cablib.EvtSvcInstall)).Go()
 	}
 
 	if !(c.install || c.uninstall) {
@@ -149,7 +150,7 @@ func installService(name, desc string) error {
 	s, err := m.OpenService(name)
 	if err == nil {
 		msg := fmt.Sprintf("service %q already exists. Updating service config and ensuring service is running...\n", name)
-		elog.Info(cablib.EvtSvcInstall, msg)
+		deck.InfoA(msg).With(eventID(cablib.EvtSvcInstall)).Go()
 		fmt.Println(msg)
 		s.UpdateConfig(config)
 	} else {
@@ -177,7 +178,7 @@ func installService(name, desc string) error {
 	}
 	if err := s.SetRecoveryActions(ra, 60); err != nil {
 		msg := fmt.Sprintf("Failed to set service recovery actions:\n%v", err)
-		elog.Error(cablib.EvtErrSvcInstall, msg)
+		deck.ErrorA(msg).With(eventID(cablib.EvtErrSvcInstall)).Go()
 		fmt.Println(msg)
 	}
 
@@ -203,7 +204,7 @@ func removeService(name string) error {
 	s, err := m.OpenService(name)
 	if err != nil {
 		msg := fmt.Sprintf("service %q is not installed.", name)
-		elog.Info(cablib.EvtSvcInstall, msg)
+		deck.InfoA(msg).With(eventID(cablib.EvtSvcInstall)).Go()
 		fmt.Println(msg)
 		return nil
 	}
@@ -215,7 +216,7 @@ func removeService(name string) error {
 	_, err = s.Control(svc.Stop)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to stop service:\n%v", err)
-		elog.Error(cablib.EvtErrService, msg)
+		deck.ErrorA(msg).With(eventID(cablib.EvtErrService)).Go()
 		fmt.Println(msg)
 	}
 

@@ -25,6 +25,7 @@ import (
 	"github.com/google/cabbie/cablib"
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
+	"github.com/google/deck"
 	"github.com/google/subcommands"
 )
 
@@ -43,7 +44,7 @@ func (c *listCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.hidden, "hidden", false, "show updates that have been marked as hidden.")
 }
 
-func (c listCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+func (c listCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subcommands.ExitStatus {
 	rc := subcommands.ExitSuccess
 	var requiredUpdates, optionalUpdates []string
 	var err error
@@ -54,7 +55,7 @@ func (c listCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...interface{
 	}
 	msg := fmt.Sprintf("Found %d required updates.\nRequired updates:\n%s\nOptional updates:\n%s\n",
 		len(requiredUpdates), strings.Join(requiredUpdates, "\n"), strings.Join(optionalUpdates, "\n"))
-	elog.Info(cablib.EvtList, msg)
+	deck.InfoA(msg).With(eventID(cablib.EvtList)).Go()
 	fmt.Print(msg)
 	return rc
 }
@@ -82,7 +83,7 @@ func listUpdates(hidden bool) ([]string, []string, error) {
 	}
 	defer q.Close()
 
-	elog.Info(cablib.EvtSearch, fmt.Sprintf("Using search criteria: %s\n", q.Criteria))
+	deck.InfofA("Using search criteria: %s\n", q.Criteria).With(eventID(cablib.EvtSearch)).Go()
 	uc, err := q.QueryUpdates()
 	if err != nil {
 		return nil, nil, fmt.Errorf("error encountered when attempting to query for updates: %v", err)
@@ -99,10 +100,10 @@ outerLoop:
 			csFilterAbsentOrMatching := e.DriverClass == "" || e.DriverClass == u.DriverClass
 			idFilterAbsentOrMatching := e.UpdateID == "" || e.UpdateID == u.Identity.UpdateID
 			if filterPresent && csFilterAbsentOrMatching && idFilterAbsentOrMatching {
-				elog.Info(cablib.EvtDriverUpdateExcluded, fmt.Sprintf(
+				deck.InfofA(
 					"Driver update %q excluded.\nFiltered driver class: %q\nFiltered update ID: %q",
 					u.Title, e.DriverClass, e.UpdateID,
-				))
+				).With(eventID(cablib.EvtDriverUpdateExcluded)).Go()
 				continue outerLoop
 			}
 		}
