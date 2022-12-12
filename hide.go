@@ -93,6 +93,8 @@ func unhide(kbs KBSet) error {
 	}
 	defer uc.Close()
 
+	deck.InfofA("Found %d matching updates.", len(uc.Updates)).With(eventID(cablib.EvtUnhide)).Go()
+
 	for _, u := range uc.Updates {
 		if kbs.Search(u.KBArticleIDs) {
 			deck.InfofA("Unhiding update:\n%s", u.Title).With(eventID(cablib.EvtUnhide)).Go()
@@ -112,6 +114,8 @@ func hide(kbs KBSet) error {
 		return err
 	}
 	defer uc.Close()
+
+	deck.InfofA("Found %d matching updates.", len(uc.Updates)).With(eventID(cablib.EvtHide)).Go()
 
 	for _, u := range uc.Updates {
 		if kbs.Search(u.KBArticleIDs) {
