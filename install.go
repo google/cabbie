@@ -293,6 +293,11 @@ func (i *installCmd) installUpdates() error {
 					config.Deadline).With(eventID(cablib.EvtUpdateSkip)).Go()
 				continue
 			}
+			deck.InfofA(
+				"Update %s deployed on %v has exceeded the %d day threshold.",
+				u.Title,
+				u.LastDeploymentChangeTime,
+				config.Deadline).With(eventID(cablib.EvtUpdatesFound)).Go()
 		}
 
 		c, err := updatecollection.New()
