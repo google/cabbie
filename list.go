@@ -32,23 +32,25 @@ import (
 // Available flags
 type listCmd struct {
 	hidden bool
+	ids    bool
 }
 
 func (listCmd) Name() string     { return "list" }
 func (listCmd) Synopsis() string { return "list updates available for install." }
 func (listCmd) Usage() string {
-	return fmt.Sprintf("%s list [--hidden]\n", filepath.Base(os.Args[0]))
+	return fmt.Sprintf("%s list [--hidden] [--ids]\n", filepath.Base(os.Args[0]))
 
 }
 func (c *listCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.hidden, "hidden", false, "show updates that have been marked as hidden.")
+	f.BoolVar(&c.ids, "ids", false, "show UpdateIDs alongside each update.")
 }
 
 func (c listCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subcommands.ExitStatus {
 	rc := subcommands.ExitSuccess
 	var requiredUpdates, optionalUpdates []string
 	var err error
-	requiredUpdates, optionalUpdates, err = listUpdates(c.hidden)
+	requiredUpdates, optionalUpdates, err = listUpdates(c.hidden, c.ids)
 	if err != nil {
 		fmt.Printf("failed to get updates with error:\n%v\n", err)
 		rc = subcommands.ExitFailure
@@ -61,7 +63,7 @@ func (c listCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subco
 }
 
 // listUpdates queries the update server and returns a list of available updates
-func listUpdates(hidden bool) ([]string, []string, error) {
+func listUpdates(hidden bool, ids bool) ([]string, []string, error) {
 	// Set search criteria
 	c := search.BasicSearch + " OR Type='Driver' OR " + search.BasicSearch + " AND Type='Software'"
 	if hidden {
@@ -110,12 +112,20 @@ outerLoop:
 
 		// Add to optional updates list if the update does not match the required categories.
 		if !u.InCategories(config.RequiredCategories) {
-			optUpdates = append(optUpdates, u.Title)
+			if ids {
+				optUpdates = append(optUpdates, fmt.Sprintf("%s | %s", u.Title, u.Identity.UpdateID))
+			} else {
+				optUpdates = append(optUpdates, u.Title)
+			}
 			continue
 		}
 		// Skip virus updates as they always exist.
 		if !u.InCategories([]string{"Definition Updates"}) {
-			reqUpdates = append(reqUpdates, u.Title)
+			if ids {
+				reqUpdates = append(reqUpdates, fmt.Sprintf("%s | %s", u.Title, u.Identity.UpdateID))
+			} else {
+				reqUpdates = append(reqUpdates, u.Title)
+			}
 			if (time.Now().Sub(u.LastDeploymentChangeTime).Hours() / 24) > 31 {
 				devicePatched = false
 			}
