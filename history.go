@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"flag"
 	"github.com/google/cabbie/cablib"
@@ -47,6 +48,12 @@ func (c *historyCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) s
 		return subcommands.ExitFailure
 	}
 	defer h.Close()
+
+	// Print entries sorted by date
+	sort.Slice(h.Entries, func(i, j int) bool {
+		return h.Entries[i].Date.Before(h.Entries[j].Date)
+	})
+
 	for _, e := range h.Entries {
 		fmt.Printf("Installed update:\n%v\n\n", e)
 	}

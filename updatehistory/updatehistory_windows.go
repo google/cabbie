@@ -182,7 +182,8 @@ func (e *Entry) String() string {
 		"UpdateIdentity: %+v\n"+
 		"ClientApplicationID: %s\n"+
 		"SupportURL: %s\n"+
-		"Categories: %+v", e.Title, e.UpdateIdentity, e.ClientApplicationID, e.SupportURL, e.Categories)
+		"Categories: %+v\n"+
+		"Date: %s", e.Title, e.UpdateIdentity, e.ClientApplicationID, e.SupportURL, e.Categories, e.Date)
 }
 
 // Get returns a history object containing the list of update history entries.
