@@ -1,10 +1,11 @@
 github.com/fsnotify/fsnotify v1.4.9 h1:hsms1Qyu0jgnwNXIxa+/V/PDsU6CfLf6CNO8H7IWoS4=
-github.com/fsnotify/fsnotify v1.4.9/go.mod h1:znqG4EE+3YCdAaPaxE2ZRY/06pZUdp0tY4IgpuI1SZQ=
 github.com/go-ole/go-ole v1.2.4/go.mod h1:XCwSNxSkXRo4vlyPy93sltvi/qJq0jqQhjqQNIwKuxM=
 github.com/go-ole/go-ole v1.2.5 h1:t4MGB5xEDZvXI+0rMjjsfBsD7yAgp/s9ZDkL1JndXwY=
 github.com/go-ole/go-ole v1.2.5/go.mod h1:pprOEPIfldk/42T2oK7lQ4v4JSDwmV0As9GaiUsvbm0=
 github.com/google/aukera v0.0.0-20201117230544-d145c8357fea h1:b22DAO5bGjMpcOvQmBWkwwjmaREdB8Mo2gzrGX/cBsQ=
 github.com/google/aukera v0.0.0-20201117230544-d145c8357fea/go.mod h1:oXqTZORBzdwQ6L32YjJmaPajqIV/hoGEouwpFMf4cJE=
+github.com/google/cabbie v1.0.5 h1:j+JWBiMpzJCTkVLKrzsNBQLkRff55sjzXc0AQOTV2JU=
+github.com/google/cabbie v1.0.5/go.mod h1:WytqVAbQee3vvDZQSROF6ZsPGrUsmpot9tKNtxnr/lk=
 github.com/google/deck v0.0.0-20221201002015-b833469335f8 h1:uKMX/djq9j56/SgsptWvWo1416wsl1Mgcy8WFpY2eA0=
 github.com/google/deck v0.0.0-20221201002015-b833469335f8/go.mod h1:KKrVnIoms+3mhqODki5FuF3MEYzB/+fmLDcNK1UD4sI=
 github.com/google/glazier v0.0.0-20210617205946-bf91b619f5d4 h1:LPaIn0zmjRExP+Cx7B3zJYrSCiDZPi3Z5jhkdWSga+8=
@@ -26,7 +27,6 @@ github.com/scjalliance/comshim v0.0.0-20190308082608-cf06d2532c4e/go.mod h1:9Tc1
 golang.org/x/net v0.17.0 h1:pVaXccu2ozPjCXewfr1S7xza/zcXTity9cCdXQYSjIM=
 golang.org/x/net v0.17.0/go.mod h1:NxSsAGuq816PNPmqtQdLE42eU2Fs7NoRIZrHJAlaCOE=
 golang.org/x/sys v0.0.0-20190916202348-b4ddaad3f8a3/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
-golang.org/x/sys v0.0.0-20191005200804-aed5e4c7ecf9/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20200622182413-4b0db7f3f76b/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210426230700-d19ff857e887/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.13.0 h1:Af8nKPmuFypiUBjVoU9V20FiaFXOcuZI21p0ycVYYGE=

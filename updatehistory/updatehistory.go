@@ -18,8 +18,8 @@ package updatehistory
 import (
 	"time"
 
-	"github.com/google/cabbie/updates"
 	"github.com/go-ole/go-ole"
+	"github.com/google/cabbie/updates"
 )
 
 // History represents an ordered read-only list of IUpdateHistoryEntry interfaces.
