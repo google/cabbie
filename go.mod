@@ -1,4 +1,4 @@
-module github.com/google/cabbie
+module github.com/NozomiNetworks/cabbie-nozomi-fork
 
 go 1.18
 
