@@ -46,7 +46,7 @@ func New(item *ole.IDispatch) (*Entry, error) {
 		case "time.Time":
 			data[p], _ = e.toDateTime(p)
 		case "[]updates.Category":
-			data[p], _ = e.toCategories(p)
+			data[p], _ = e.toCategories()
 		case "updates.Identity":
 			data[p], _ = e.toIdentity(p)
 		}
@@ -121,7 +121,7 @@ func (e *Entry) toIdentity(property string) (updates.Identity, error) {
 	return i, nil
 }
 
-func (e *Entry) toCategories(string) ([]updates.Category, error) {
+func (e *Entry) toCategories() ([]updates.Category, error) {
 	cs := []updates.Category{}
 	cats, err := oleutil.GetProperty(e.Item, "Categories")
 	if err != nil {
