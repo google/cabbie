@@ -22,11 +22,11 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/go-ole/go-ole"
+	"github.com/go-ole/go-ole/oleutil"
 	"github.com/google/cabbie/cablib"
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/updates"
-	"github.com/go-ole/go-ole"
-	"github.com/go-ole/go-ole/oleutil"
 )
 
 // New expands an IUpdateHistoryEntry object into a usable go struct
@@ -46,7 +46,7 @@ func New(item *ole.IDispatch) (*Entry, error) {
 		case "time.Time":
 			data[p], _ = e.toDateTime(p)
 		case "[]updates.Category":
-			data[p], _ = e.toCategories(p)
+			data[p], _ = e.toCategories()
 		case "updates.Identity":
 			data[p], _ = e.toIdentity(p)
 		}
@@ -64,31 +64,35 @@ func (e *Entry) toString(property string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return p.ToString(), nil
+	out := p.ToString()
+	_ = p.Clear()
+	return out, nil
 }
 
 func (e *Entry) toInt(property string) (int, error) {
+	var out int
 	p, err := oleutil.GetProperty(e.Item, property)
 	if err != nil {
 		return 0, nil
 	}
-
-	if p.Value() == nil {
-		return 0, nil
+	if p.Value() != nil {
+		out = int(p.Value().(int32))
 	}
-	return int(p.Value().(int32)), nil
+	_ = p.Clear()
+	return out, nil
 }
 
 func (e *Entry) toDateTime(property string) (time.Time, error) {
+	var out time.Time
 	p, err := oleutil.GetProperty(e.Item, property)
 	if err != nil {
 		return time.Time{}, err
 	}
-
-	if p.Value() == nil {
-		return time.Time{}, nil
+	if p.Value() != nil {
+		out = p.Value().(time.Time)
 	}
-	return p.Value().(time.Time), nil
+	_ = p.Clear()
+	return out, nil
 }
 
 func (e *Entry) toIdentity(property string) (updates.Identity, error) {
@@ -105,17 +109,19 @@ func (e *Entry) toIdentity(property string) (updates.Identity, error) {
 		return updates.Identity{}, err
 	}
 	i.RevisionNumber = int(rn.Value().(int32))
+	_ = rn.Clear()
 
 	uid, err := oleutil.GetProperty(pd, "UpdateID")
 	if err != nil {
 		return updates.Identity{}, err
 	}
 	i.UpdateID = uid.ToString()
+	_ = uid.Clear()
 
 	return i, nil
 }
 
-func (e *Entry) toCategories(property string) ([]updates.Category, error) {
+func (e *Entry) toCategories() ([]updates.Category, error) {
 	cs := []updates.Category{}
 	cats, err := oleutil.GetProperty(e.Item, "Categories")
 	if err != nil {
@@ -143,14 +149,14 @@ func (e *Entry) toCategories(property string) ([]updates.Category, error) {
 		}
 		t, err := oleutil.GetProperty(itemd, "Type")
 		if err != nil {
-			n.Clear()
+			_ = n.Clear()
 			itemd.Release()
 			continue
 		}
 		c, err := oleutil.GetProperty(itemd, "CategoryID")
 		if err != nil {
-			n.Clear()
-			t.Clear()
+			_ = n.Clear()
+			_ = t.Clear()
 			itemd.Release()
 			continue
 		}
@@ -160,9 +166,9 @@ func (e *Entry) toCategories(property string) ([]updates.Category, error) {
 			Type:       t.ToString(),
 			CategoryID: c.ToString()})
 		itemd.Release()
-		n.Clear()
-		t.Clear()
-		c.Clear()
+		_ = n.Clear()
+		_ = t.Clear()
+		_ = c.Clear()
 	}
 
 	return cs, nil
@@ -206,7 +212,6 @@ func Get(searchInterface *search.Searcher) (*History, error) {
 		return nil, err
 	}
 
-	h.Entries = make([]*Entry, 0)
 	for i := 0; i < count; i++ {
 		item, err := oleutil.GetProperty(h.IUpdateHistoryEntryCollection, "item", i)
 		if err != nil {
@@ -214,18 +219,17 @@ func Get(searchInterface *search.Searcher) (*History, error) {
 			return nil, err
 		}
 		itemd := item.ToIDispatch()
-
 		uh, err := New(itemd)
 		if err != nil {
 			itemd.Release()
 			h.Close()
 			return nil, fmt.Errorf("errors in update enumeration: %v", err)
 		}
-
 		// Weed out random invalid entries that show up for some reason.
 		if uh.Operation != 0 {
 			h.Entries = append(h.Entries, uh)
 		}
+		_ = item.Clear()
 	}
 
 	return &h, nil
@@ -244,14 +248,4 @@ func (hc *History) Count() (int, error) {
 // Close turns down any open update sessions.
 func (hc *History) Close() {
 	hc.IUpdateHistoryEntryCollection.Release()
-	hc.closeItems()
-}
-
-func (hc *History) closeItems() {
-	//TODO(b/136258504) Using range causes application to occasionally hang.
-	for i := 0; i < len(hc.Entries); i++ {
-		if hc.Entries[i] != nil {
-			hc.Entries[i].Item.Release()
-		}
-	}
 }
