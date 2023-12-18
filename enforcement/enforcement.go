@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -67,7 +66,7 @@ func enforcements(path string) (Enforcements, error) {
 	if !b {
 		return e, fmt.Errorf("%w: %q", errInvalidFile, path)
 	}
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return e, fmt.Errorf("error reading file %q: %v", path, err)
 	}
@@ -80,7 +79,7 @@ func enforcements(path string) (Enforcements, error) {
 // Get attempts to return all known external enforcements.
 func Get() (Enforcements, error) {
 	var ret Enforcements
-	files, err := ioutil.ReadDir(enforceDir)
+	files, err := os.ReadDir(enforceDir)
 	if err != nil {
 		return ret, err
 	}
