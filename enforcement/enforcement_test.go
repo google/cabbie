@@ -58,17 +58,17 @@ func TestDedupe(t *testing.T) {
 			Enforcements{ExcludedDrivers: []DriverExclude{
 				{DriverClass: "Dupe"},
 				{DriverClass: "Unique"},
-				{UpdateID: "DupeID"},
+				{DriverDateVer: "2020-01-01"},
 				{DriverClass: "Dupe"},
-				{UpdateID: "DupeID"},
-				{DriverClass: "Dupe", UpdateID: "DupeID"},
-				{DriverClass: "Dupe", UpdateID: "DupeID"},
+				{DriverDateVer: "2020-01-01"},
+				{DriverClass: "Dupe", DriverDateVer: "2020-01-01"},
+				{DriverClass: "Dupe", DriverDateVer: "2020-01-01"},
 			}},
 			Enforcements{ExcludedDrivers: []DriverExclude{
 				{DriverClass: "Dupe"},
 				{DriverClass: "Unique"},
-				{UpdateID: "DupeID"},
-				{DriverClass: "Dupe", UpdateID: "DupeID"},
+				{DriverDateVer: "2020-01-01"},
+				{DriverClass: "Dupe", DriverDateVer: "2020-01-01"},
 			}},
 		},
 	}
@@ -99,10 +99,10 @@ func TestEnforcements(t *testing.T) {
 		{"excluded-drivers.json",
 			Enforcements{ExcludedDrivers: []DriverExclude{
 				{DriverClass: "UnitTest"},
-				{UpdateID: "deadbeef-dead-beef-dead-beefdeadbeef"},
+				{DriverDateVer: "1999-12-31"},
 				{
-					DriverClass: "OtherSnacks",
-					UpdateID:    "cafef00d-cafe-f00d-cafe-f00dcafef00d",
+					DriverClass:   "OtherSnacks",
+					DriverDateVer: "1888-12-31",
 				},
 			}},
 			nil,

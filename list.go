@@ -65,7 +65,7 @@ func (c listCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subco
 // listUpdates queries the update server and returns a list of available updates
 func listUpdates(hidden bool, ids bool) ([]string, []string, error) {
 	// Set search criteria
-	c := search.BasicSearch + " OR Type='Driver' OR " + search.BasicSearch + " AND Type='Software'"
+	c := search.BasicSearch + " OR " + search.BasicSearch + " AND Type='Software'"
 	if hidden {
 		c += " and IsHidden=1"
 	} else {
@@ -98,13 +98,18 @@ func listUpdates(hidden bool, ids bool) ([]string, []string, error) {
 outerLoop:
 	for _, u := range uc.Updates {
 		for _, e := range excludes {
-			filterPresent := e.DriverClass != "" || e.UpdateID != ""
-			csFilterAbsentOrMatching := e.DriverClass == "" || e.DriverClass == u.DriverClass
-			idFilterAbsentOrMatching := e.UpdateID == "" || e.UpdateID == u.Identity.UpdateID
-			if filterPresent && csFilterAbsentOrMatching && idFilterAbsentOrMatching {
+			t, err := time.Parse("2006-01-02", e.DriverDateVer)
+			if err != nil {
+				deck.WarningfA("Failed to parse driver date version provided in exclusion json: %v", err).With(eventID(cablib.EvtErrDriverExclusion)).Go()
+			}
+			// Check if at least one driver exclusion exists and matches the update being evaluated.
+			driverFilterExists := e.DriverClass != "" || !t.IsZero()
+			driverClassMatch := e.DriverClass == "" || e.DriverClass == u.DriverClass
+			driverVersionMatch := t.IsZero() || t.Equal(u.DriverVerDate)
+			if driverFilterExists && driverClassMatch && driverVersionMatch {
 				deck.InfofA(
 					"Driver update %q excluded.\nFiltered driver class: %q\nFiltered update ID: %q",
-					u.Title, e.DriverClass, e.UpdateID,
+					u.Title, e.DriverClass, e.DriverDateVer,
 				).With(eventID(cablib.EvtDriverUpdateExcluded)).Go()
 				continue outerLoop
 			}

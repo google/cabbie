@@ -4,11 +4,11 @@
       "driver-class": "UnitTest"
     },
     {
-      "update-id": "deadbeef-dead-beef-dead-beefdeadbeef"
+      "driver-date-version": "1999-12-31"
     },
     {
       "driver-class": "OtherSnacks",
-      "update-id": "cafef00d-cafe-f00d-cafe-f00dcafef00d"
+      "driver-date-version": "1888-12-31"
     }
   ]
 }

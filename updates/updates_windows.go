@@ -42,10 +42,20 @@ func New(item *ole.IDispatch) (*Update, []error) {
 			continue
 		}
 
-		if p == "DriverClass" {
-			// Check if IUpdate object also implements IWindowsDriverUpdate object.
+		driverProperties := map[string]bool{
+			"DeviceProblemNumber": true,
+			"DeviceStatus":        true,
+			"DriverClass":         true,
+			"DriverHardwareID":    true,
+			"DriverManufacturer":  true,
+			"DriverModel":         true,
+			"DriverProvider":      true,
+			"DriverVerDate":       true,
+		}
+		if driverProperties[p] {
+			// Check if IUpdate object also implements any IWindowsDriverUpdate property.
 			// If not, skip attempting to extract IWindowsDriverUpdate properties.
-			// See https://docs.microsoft.com/en-us/windows/win32/api/wuapi/nn-wuapi-iwindowsdriverupdate#remarks
+			// See https://docs.microsoft.com/en-us/windows/win32/api/wuapi/nn-wuapi-iwindowsdriverupdate
 			if _, err := u.Item.QueryInterface(cablib.IIDIWindowsDriverUpdate); err != nil {
 				continue
 			}

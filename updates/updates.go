@@ -72,7 +72,14 @@ type Update struct {
 	SupportURL               string
 	Type                     string
 
-	// DriverClass is part of the IWindowsDriverUpdate object which can extend the IUpdate object.
+	// If this is a driver, iUpdate is extended with the following IWindowsDriverUpdate properties.
 	// See: https://docs.microsoft.com/en-us/windows/win32/api/wuapi/nn-wuapi-iwindowsdriverupdate
-	DriverClass string
+	DeviceProblemNumber int
+	DeviceStatus        int
+	DriverClass         string
+	DriverHardwareID    string
+	DriverManufacturer  string
+	DriverModel         string
+	DriverProvider      string
+	DriverVerDate       time.Time
 }

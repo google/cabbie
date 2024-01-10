@@ -49,8 +49,8 @@ type Enforcements struct {
 // DriverExclude specifies criteria to exclude certain driver updates.
 // A driver update is ignored by Cabbie if it matches all criteria.
 type DriverExclude struct {
-	DriverClass string `json:"driver-class"`
-	UpdateID    string `json:"update-id"`
+	DriverClass   string `json:"driver-class"`
+	DriverDateVer string `json:"driver-date-version"`
 }
 
 func enforcements(path string) (Enforcements, error) {

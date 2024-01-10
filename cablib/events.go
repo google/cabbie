@@ -100,6 +100,8 @@ const (
 	EvtErrEnforcement
 	// EvtErrSvcInstall indicates a problem during service (un)installation
 	EvtErrSvcInstall
+	// EvtErrDriverExclusion indicates a problem with driver exclusion.
+	EvtErrDriverExclusion
 	// EvtErrMisc indicates a miscellaneous internal error condition.
 	EvtErrMisc
 )
