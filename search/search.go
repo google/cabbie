@@ -54,7 +54,7 @@ const (
 	// Upgrades GUID
 	Upgrades CategoryID = "3689BDC8-B205-4AF4-8D4A-A63924C5E9D5"
 	// BasicSearch is the default search to query for assigned updates that are not installed
-	BasicSearch = "IsInstalled=0 and DeploymentAction='Installation'" + " OR Type='Driver'"
+	BasicSearch = "IsInstalled=0 and DeploymentAction='Installation'"
 )
 
 // Searcher describes search properties

@@ -65,7 +65,7 @@ func (c listCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subco
 // listUpdates queries the update server and returns a list of available updates
 func listUpdates(hidden bool, ids bool) ([]string, []string, error) {
 	// Set search criteria
-	c := search.BasicSearch + " OR " + search.BasicSearch + " AND Type='Software'"
+	c := search.BasicSearch + " OR Type='Driver' OR " + search.BasicSearch + " AND Type='Software'"
 	if hidden {
 		c += " and IsHidden=1"
 	} else {
