@@ -37,8 +37,8 @@ import (
 
 // Available flags
 type installCmd struct {
-	all, drivers, deadlineOnly, Interactive, virusDef, visibleUpdates bool
-	kbs                                                               string
+	all, drivers, deadlineOnly, Interactive, virusDef bool
+	kbs                                               string
 }
 
 type installRsp struct {
@@ -122,13 +122,10 @@ func (i *installCmd) criteria() (string, []string) {
 	case i.kbs != "":
 		c = search.BasicSearch
 		deck.InfofA("Starting search for KB's %q:\n%s", i.kbs, c).With(eventID(cablib.EvtSearch)).Go()
-	case i.visibleUpdates:
-		c = search.BasicSearch + " and IsHidden=0"
-		deck.InfofA("Starting search for updates which aren't hidden: %s", c).With(eventID(cablib.EvtSearch)).Go()
 	default:
 		c = search.BasicSearch
 		rc = config.RequiredCategories
-		deck.InfofA("Starting search for all general updates: %s", c).With(eventID(cablib.EvtSearch)).Go()
+		deck.InfofA("Starting search for general updates: %s", c).With(eventID(cablib.EvtSearch)).Go()
 	}
 	return c, rc
 }

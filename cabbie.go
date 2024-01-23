@@ -362,7 +362,7 @@ func runMainLoop() error {
 	for {
 		select {
 		case <-t.Default.C:
-			i := installCmd{Interactive: false, visibleUpdates: true}
+			i := installCmd{Interactive: false}
 			err := i.installUpdates()
 			if e := updateInstallSuccess.Set(err == nil); e != nil {
 				deck.ErrorfA("Error posting metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
@@ -385,7 +385,7 @@ func runMainLoop() error {
 				break
 			}
 			if s[0].State == "open" {
-				i := installCmd{Interactive: false, visibleUpdates: true}
+				i := installCmd{Interactive: false}
 				err := i.installUpdates()
 				if e := updateInstallSuccess.Set(err == nil); e != nil {
 					deck.ErrorfA("Error posting updateInstallSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
@@ -427,7 +427,7 @@ func runMainLoop() error {
 			}
 
 			if config.Deadline != 0 {
-				i := installCmd{Interactive: false, deadlineOnly: true, visibleUpdates: true}
+				i := installCmd{Interactive: false, deadlineOnly: true}
 				if err := i.installUpdates(); err != nil {
 					deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 				}
