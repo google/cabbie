@@ -109,7 +109,10 @@ func (i *installCmd) criteria() (string, []string) {
 	var rc []string
 	switch {
 	case i.all:
-		c = search.BasicSearch
+		// Search for non-hidden updates, drivers, or hidden updates. OR is used to separate the search
+		// groups per
+		// https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nf-wuapi-iupdatesearcher-search
+		c = search.BasicSearch + " AND IsHidden=0 OR Type='Driver' OR " + search.BasicSearch + " AND IsHidden=1"
 		deck.InfofA("Starting search for all updates: %s", c).With(eventID(cablib.EvtSearch)).Go()
 	case i.drivers:
 		c = "Type='Driver'"
@@ -123,7 +126,7 @@ func (i *installCmd) criteria() (string, []string) {
 		c = search.BasicSearch
 		deck.InfofA("Starting search for KB's %q:\n%s", i.kbs, c).With(eventID(cablib.EvtSearch)).Go()
 	default:
-		c = search.BasicSearch
+		c = search.BasicSearch + " AND IsHidden=0 OR Type='Driver'"
 		rc = config.RequiredCategories
 		deck.InfofA("Starting search for general updates: %s", c).With(eventID(cablib.EvtSearch)).Go()
 	}
