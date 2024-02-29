@@ -109,10 +109,7 @@ func (i *installCmd) criteria() (string, []string) {
 	var rc []string
 	switch {
 	case i.all:
-		// Search for non-hidden updates, drivers, or hidden updates. OR is used to separate the search
-		// groups per
-		// https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nf-wuapi-iupdatesearcher-search
-		c = search.BasicSearch + " AND IsHidden=0 OR Type='Driver' OR " + search.BasicSearch + " AND IsHidden=1"
+		c = search.BasicSearch + " AND IsHidden=0 OR Type='Driver'"
 		deck.InfofA("Starting search for all updates: %s", c).With(eventID(cablib.EvtSearch)).Go()
 	case i.drivers:
 		c = "Type='Driver'"
@@ -260,7 +257,29 @@ func (i *installCmd) installUpdates() error {
 	installingMinOneUpdate := false
 
 	kbs := NewKBSet(i.kbs)
+	excludes := excludedDrivers.get()
+outerLoop:
 	for _, u := range uc.Updates {
+		for _, e := range excludes {
+			t := time.Time{}
+			if e.DriverDateVer != "" {
+				t, err = time.Parse("2006-01-02", e.DriverDateVer)
+				if err != nil {
+					deck.WarningfA("Failed to parse driver date version provided in exclusion json: %v", err).With(eventID(cablib.EvtErrDriverExclusion)).Go()
+				}
+			}
+			// Check if at least one driver exclusion exists and matches the update being evaluated.
+			driverFilterExists := e.DriverClass != "" || !t.IsZero()
+			driverClassMatch := e.DriverClass == "" || e.DriverClass == u.DriverClass
+			driverVersionMatch := t.IsZero() || t.Equal(u.DriverVerDate)
+			if driverFilterExists && driverClassMatch && driverVersionMatch {
+				deck.InfofA(
+					"Driver update %q excluded.\nFiltered driver class: %q\nFiltered driver date version: %q",
+					u.Title, e.DriverClass, e.DriverDateVer,
+				).With(eventID(cablib.EvtDriverUpdateExcluded)).Go()
+				continue outerLoop
+			}
+		}
 		if !(u.InCategories(rc)) {
 			deck.InfofA("Skipping update %s.\nRequiredClassifications:\n%v\nUpdate classifications:\n%v",
 				u.Title,
@@ -288,6 +307,14 @@ func (i *installCmd) installUpdates() error {
 		if i.deadlineOnly {
 			deadline := time.Duration(config.Deadline) * 24 * time.Hour
 			pastDeadline := time.Now().After(u.LastDeploymentChangeTime.Add(deadline))
+			if u.DriverClass != "" {
+				deck.InfofA(
+					"Skipping driver %s with class %s and date version %s.\nDrivers are only installed during a maintenance window at this time.",
+					u.Title,
+					u.DriverClass,
+					u.DriverVerDate).With(eventID(cablib.EvtUpdateSkip)).Go()
+				continue
+			}
 			if !pastDeadline {
 				deck.InfofA(
 					"Skipping update %s.\nUpdate deployed on %v has not reached the %d day threshold.",

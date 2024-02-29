@@ -92,31 +92,9 @@ func listUpdates(hidden bool, ids bool) ([]string, []string, error) {
 	}
 	defer uc.Close()
 
-	excludes := excludedDrivers.get()
 	var reqUpdates, optUpdates []string
 	devicePatched := true
-outerLoop:
 	for _, u := range uc.Updates {
-		for _, e := range excludes {
-			t := time.Time{}
-			if e.DriverDateVer != "" {
-				t, err = time.Parse("2006-01-02", e.DriverDateVer)
-				if err != nil {
-					deck.WarningfA("Failed to parse driver date version provided in exclusion json: %v", err).With(eventID(cablib.EvtErrDriverExclusion)).Go()
-				}
-			}
-			// Check if at least one driver exclusion exists and matches the update being evaluated.
-			driverFilterExists := e.DriverClass != "" || !t.IsZero()
-			driverClassMatch := e.DriverClass == "" || e.DriverClass == u.DriverClass
-			driverVersionMatch := t.IsZero() || t.Equal(u.DriverVerDate)
-			if driverFilterExists && driverClassMatch && driverVersionMatch {
-				deck.InfofA(
-					"Driver update %q excluded.\nFiltered driver class: %q\nFiltered driver date version: %q",
-					u.Title, e.DriverClass, e.DriverDateVer,
-				).With(eventID(cablib.EvtDriverUpdateExcluded)).Go()
-				continue outerLoop
-			}
-		}
 
 		// Add to optional updates list if the update does not match the required categories.
 		if !u.InCategories(config.RequiredCategories) {
