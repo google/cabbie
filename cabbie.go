@@ -308,8 +308,16 @@ func enforce() error {
 			deck.ErrorA(failures).With(eventID(cablib.EvtErrHide)).Go()
 		}
 	}
-	excludedDrivers.set(updates.ExcludedDrivers)
 	return failures
+}
+
+func initDriverExclusion() error {
+	updates, err := enforcement.Get()
+	if err != nil {
+		return fmt.Errorf("error retrieving required updates: %v", err)
+	}
+	excludedDrivers.set(updates.ExcludedDrivers)
+	return nil
 }
 
 func runMainLoop() error {

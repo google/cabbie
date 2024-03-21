@@ -257,6 +257,9 @@ func (i *installCmd) installUpdates() error {
 	installingMinOneUpdate := false
 
 	kbs := NewKBSet(i.kbs)
+	if err := initDriverExclusion(); err != nil {
+		deck.ErrorfA("Error initializing driver exclusions:\n%v", err).With(eventID(cablib.EvtErrDriverExclusion)).Go()
+	}
 	excludes := excludedDrivers.get()
 outerLoop:
 	for _, u := range uc.Updates {
