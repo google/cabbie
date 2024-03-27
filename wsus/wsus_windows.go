@@ -20,15 +20,24 @@ package wsus
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/google/cabbie/cablib"
 	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows/svc/eventlog"
+	"golang.org/x/sys/windows/svc/mgr"
+	"golang.org/x/sys/windows/svc"
 )
 
 var (
 	wlog *eventlog.Log
+
+	// Test Stubs
+	clnUpdateFolder = cleanUpdateFolder
+	stpService      = stopService
+	strtService     = startService
 )
 
 func responseTime(name string) time.Duration {
@@ -51,6 +60,93 @@ func responseTime(name string) time.Duration {
 	}
 
 	return time.Since(start)
+}
+
+func cleanUpdateFolder(dir string) error {
+	if err := stpService("wuauserv"); err != nil {
+		return fmt.Errorf("StopService failure: %w", err)
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("os.Open(%s): %w", dir, err)
+	}
+	defer d.Close()
+	// Read all object names in the directory.
+	objects, err := d.Readdirnames(-1)
+	if err != nil {
+		return fmt.Errorf("Readdirnames: %w", err)
+	}
+	// Loop through the slice and delete each object.
+	for _, object := range objects {
+		if err := os.RemoveAll(filepath.Join(dir, object)); err != nil {
+			return fmt.Errorf("os.RemoveAll(%s): %w", filepath.Join(dir, object), err)
+		}
+	}
+	if err := strtService("wuauserv"); err != nil {
+		return fmt.Errorf("StartService failure: %w", err)
+	}
+	return nil
+}
+
+// stopService attempts to stop local system services.
+func stopService(name string) error {
+	m, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("failed to connect to service manager: %w", err)
+	}
+	defer m.Disconnect()
+	s, err := m.OpenService(name)
+	if err != nil {
+		return fmt.Errorf("failed to open service (%s): %w", name, err)
+	}
+	defer s.Close()
+	// Although s.Control returns stat, if the service is already stopped it returns an error.
+	stat, err := s.Query()
+	if err != nil {
+		return fmt.Errorf("failed to query service (%s): %w", s.Name, err)
+	}
+	if stat.State == svc.Stopped {
+		return nil
+	}
+	stat, err = s.Control(svc.Stop)
+	if err != nil {
+		return fmt.Errorf("failed to send control message (%s): %w", s.Name, err)
+	}
+	retry := 0
+	for stat.State != svc.Stopped {
+		time.Sleep(5 * time.Second)
+		retry++
+		if retry > 12 {
+			return fmt.Errorf("timed out waiting for service %s to stop", s.Name)
+		}
+		stat, err = s.Query()
+		if err != nil {
+			return fmt.Errorf("failed to query service (%s): %w", s.Name, err)
+		}
+	}
+	return nil
+}
+
+// startService attempts to start local system services.
+func startService(name string) error {
+	m, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("failed to connect to service manager: %w", err)
+	}
+	defer m.Disconnect()
+	s, err := m.OpenService(name)
+	if err != nil {
+		return fmt.Errorf("failed to open service (%s): %w", name, err)
+	}
+	defer s.Close()
+	stat, err := s.Query()
+	if err != nil {
+		return fmt.Errorf("failed to query service (%s): %w", s.Name, err)
+	}
+	if stat.State == svc.Running {
+		return nil
+	}
+	return s.Start()
 }
 
 // Init will initialize the local update client with the desired WSUS config.
@@ -135,8 +231,13 @@ func (w *WSUS) Set(index int) error {
 		return err
 	}
 	defer sk.Close()
-
-	return sk.SetDWordValue("UseWUServer", 1)
+	if err := sk.SetDWordValue("UseWUServer", 1); err != nil {
+		return err
+	}
+	// The cleanUpdateFolder runs to fix error 0x80244011 from being thrown during update
+	// runs after WSUS servers are set.
+	updateDir := os.Getenv("windir") + `\SoftwareDistribution`
+	return clnUpdateFolder(updateDir)
 }
 
 // Clear sets WSUS client configurations back to Windows defaults.
