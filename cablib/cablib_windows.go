@@ -149,7 +149,22 @@ func RebootRequired() (bool, error) {
 	}
 	defer r.Clear()
 
-	return r.Value().(bool), nil
+	registryReboot := false
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired`, registry.QUERY_VALUE|registry.ENUMERATE_SUB_KEYS)
+	if err != nil {
+		if err == registry.ErrNotExist {
+			registryReboot = true
+		} else {
+			return false, err
+		}
+	}
+	defer k.Close()
+
+	if r.Value().(bool) && registryReboot {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // GetUpdateTitles loops through an update collection and returns a list of titles.
