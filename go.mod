@@ -10,8 +10,8 @@ require (
 	github.com/google/go-cmp v0.5.4
 	github.com/google/subcommands v1.2.0
 	github.com/scjalliance/comshim v0.0.0-20190308082608-cf06d2532c4e
-	golang.org/x/net v0.17.0
-	golang.org/x/sys v0.13.0
+	golang.org/x/net v0.23.0
+	golang.org/x/sys v0.18.0
 	gopkg.in/fsnotify.v1 v1.4.7
 	gopkg.in/toast.v1 v1.0.0-20180812000517-0a84660828b2
 )
