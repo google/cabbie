@@ -192,16 +192,22 @@ func (e *Entry) String() string {
 		"Date: %s", e.Title, e.UpdateIdentity, e.ClientApplicationID, e.SupportURL, e.Categories, e.Date)
 }
 
-// Get returns a history object containing the list of update history entries.
-func Get(searchInterface *search.Searcher) (*History, error) {
-	c, err := searchInterface.GetTotalHistoryCount()
+// Get returns:
+// History object containing the list of update history entries
+// count of update events
+// error
+func Get(searchInterface *search.Searcher) (*History, int, error) {
+	updateHistoryCount, err := searchInterface.GetTotalHistoryCount()
 	if err != nil {
-		return nil, err
+		return nil, updateHistoryCount, err
+	}
+	if updateHistoryCount == 0 {
+		return nil, updateHistoryCount, nil
 	}
 
-	hc, err := searchInterface.QueryHistory(c)
+	hc, err := searchInterface.QueryHistory(updateHistoryCount)
 	if err != nil {
-		return nil, err
+		return nil, updateHistoryCount, err
 	}
 
 	h := History{IUpdateHistoryEntryCollection: hc}
@@ -209,21 +215,21 @@ func Get(searchInterface *search.Searcher) (*History, error) {
 	count, err := h.Count()
 	if err != nil {
 		h.Close()
-		return nil, err
+		return nil, updateHistoryCount, err
 	}
 
 	for i := 0; i < count; i++ {
 		item, err := oleutil.GetProperty(h.IUpdateHistoryEntryCollection, "item", i)
 		if err != nil {
 			h.Close()
-			return nil, err
+			return nil, updateHistoryCount, err
 		}
 		itemd := item.ToIDispatch()
 		uh, err := New(itemd)
 		if err != nil {
 			itemd.Release()
 			h.Close()
-			return nil, fmt.Errorf("errors in update enumeration: %v", err)
+			return nil, updateHistoryCount, fmt.Errorf("errors in update enumeration: %v", err)
 		}
 		// Weed out random invalid entries that show up for some reason.
 		if uh.Operation != 0 {
@@ -232,7 +238,7 @@ func Get(searchInterface *search.Searcher) (*History, error) {
 		_ = item.Clear()
 	}
 
-	return &h, nil
+	return &h, updateHistoryCount, nil
 }
 
 // Count gets the number of updates in an IUpdateHistoryEntryCollection.
