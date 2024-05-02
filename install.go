@@ -168,6 +168,13 @@ func installCollection(s *session.UpdateSession, c *updatecollection.Collection)
 	defer inst.Close()
 
 	if err := inst.Install(); err != nil {
+		if strings.Contains(err.Error(), "WU_S_REBOOT_REQUIRED") {
+			rebootMessage(int(config.RebootDelay))
+			if err := cablib.SetRebootTime(config.RebootDelay); err != nil {
+				deck.ErrorfA("Failed to run reboot command:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
+			}
+			rebootEvent <- true
+		}
 		return nil, fmt.Errorf("error installing updates:\n %v", err)
 	}
 
@@ -192,36 +199,6 @@ func installCollection(s *session.UpdateSession, c *updatecollection.Collection)
 
 func (i *installCmd) installUpdates() error {
 	var rebootRequired bool
-
-	// Check for reboot status when not installing virus definitions.
-	if !(i.virusDef) {
-		rebootRequired, err := cablib.RebootRequired()
-		if err != nil {
-			return fmt.Errorf("failed to determine reboot status: %v", err)
-		}
-
-		if rebootRequired {
-			if i.Interactive {
-				fmt.Println("Host has existing updates pending reboot.")
-				rebootEvent <- rebootRequired
-				return nil
-			}
-			t, err := cablib.RebootTime()
-			if err != nil {
-				return fmt.Errorf("Error getting reboot time: %v", err)
-			}
-			if t.IsZero() {
-				// Set reboot time if a reboot is pending but no time has been set.
-				// This can happen when a user installs updates outside of Cabbie.
-				rebootMessage(int(config.RebootDelay))
-				if err := cablib.SetRebootTime(config.RebootDelay); err != nil {
-					return fmt.Errorf("Failed to set reboot time:\n%v", err)
-				}
-			}
-			rebootEvent <- rebootRequired
-			return nil
-		}
-	}
 
 	// Start Windows update session
 	s, err := session.New()
