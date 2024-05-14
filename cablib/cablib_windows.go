@@ -95,13 +95,13 @@ func cleanRebootValue() error {
 	return k.DeleteValue(rebootValue)
 }
 
-// SystemReboot initates a restart when the set reboot time has passed. This should be called within a goroutine
+// SystemReboot initiates a restart when the set reboot time has passed. This should be called within a goroutine
 func SystemReboot(t time.Time) error {
 	time.Sleep(time.Until(t))
 
-	notification.RebootPopup(2).Push()
+	notification.RebootPopup(20).Push()
 
-	time.Sleep(2 * time.Minute)
+	time.Sleep(20 * time.Minute)
 
 	if err := cleanRebootValue(); err != nil {
 		return fmt.Errorf("failed to clean up registry value %q: %v", rebootValue, err)
