@@ -61,9 +61,6 @@ func (i *Installer) Install() error {
 	r, err := oleutil.CallMethod(i.IUpdateInstaller, "Install")
 	i.IInstallationResult = r.ToIDispatch()
 	if err != nil {
-		if errors.UpdateError(r.Val).ErrorName() != `` {
-			return fmt.Errorf("install error: [%s] [%v]", errors.UpdateError(r.Val).ErrorName(), err)
-		}
 		return fmt.Errorf("install error: [%s] [%v]", errors.UpdateError(r.Val), err)
 	}
 	return nil
