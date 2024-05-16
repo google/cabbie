@@ -211,12 +211,9 @@ func (i *installCmd) installUpdates() error {
 				return fmt.Errorf("Error getting reboot time: %v", err)
 			}
 			if t.IsZero() {
-				// Set reboot time if a reboot is pending but no time has been set.
-				// This can happen when a user installs updates outside of Cabbie.
-				rebootMessage(int(config.RebootDelay))
-				if err := cablib.SetRebootTime(config.RebootDelay); err != nil {
-					return fmt.Errorf("Failed to set reboot time:\n%v", err)
-				}
+				// Don't trigger a reboot if one is pending but no time has been set.
+				// This can happen when updates are installed outside of Cabbie.
+				return nil
 			}
 			rebootEvent <- rebootRequired
 			return nil
