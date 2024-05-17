@@ -483,6 +483,7 @@ func runMainLoop() error {
 						deck.InfoA("Zero time returned, no reboot defined.").With(eventID(cablib.EvtMisc)).Go()
 						return
 					}
+					deck.InfofA("Reboot time is %s", t.String()).With(eventID(cablib.EvtMisc)).Go()
 					if err := cablib.SystemReboot(t); err != nil {
 						deck.ErrorfA("SystemReboot() error:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
 					}
