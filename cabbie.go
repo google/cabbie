@@ -404,8 +404,7 @@ func runMainLoop() error {
 				}
 			}
 		case <-t.List.C:
-			setRebootMetric()
-			requiredUpdates, optionalUpdates, err := listUpdates(true, false)
+			requiredUpdates, optionalUpdates, err := listUpdates(false, false)
 			if e := listUpdateSuccess.Set(err == nil); e != nil {
 				deck.ErrorfA("Error posting listUpdateSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
 			}
