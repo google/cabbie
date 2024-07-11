@@ -28,6 +28,7 @@ import (
 	"github.com/google/cabbie/updatecollection"
 	"github.com/google/cabbie/updates"
 	"github.com/google/cabbie/wsus"
+	"github.com/google/deck"
 	"golang.org/x/sys/windows/registry"
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
@@ -129,7 +130,7 @@ func (s *Searcher) QueryUpdates() (*updatecollection.Collection, error) {
 
 		up, errors := updates.New(itemd)
 		if errors != nil {
-			return nil, fmt.Errorf("errors in update enumeration: %v", errors)
+			deck.Errorf("errors in update enumeration: %v", errors)
 		}
 		updd.Updates[i] = up
 
