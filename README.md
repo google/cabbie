@@ -153,7 +153,8 @@ ProgramData directory (C:\ProgramData\Cabbie).
 
 Required updates can be designated as a list of zero or more KB article strings
 under the `required` key. To hide an update from cabbie, place the KB article
-string under the `hidden` key.
+string under the `hidden` key or use the Update ID under the `hidden-UpdateID`
+key.
 
 Example:
 
@@ -164,6 +165,9 @@ Example:
   ],
   "hidden": [
     "456789"
+  ],
+  "hidden-UpdateID": [
+    "1234ccd5-1234-456f-78gh-ij2911553881"
   ]
 }
 ```

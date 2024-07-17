@@ -44,6 +44,7 @@ type Enforcements struct {
 	Required        []string        `json:"required"`
 	ExcludedDrivers []DriverExclude `json:"excluded-drivers"`
 	Hidden          []string        `json:"hidden"`
+	HiddenUpdateID  []string        `json:"hidden-UpdateID"`
 }
 
 // DriverExclude specifies criteria to exclude certain driver updates.
@@ -93,6 +94,7 @@ func Get() (Enforcements, error) {
 		ret.Required = append(ret.Required, e.Required...)
 		ret.Hidden = append(ret.Hidden, e.Hidden...)
 		ret.ExcludedDrivers = append(ret.ExcludedDrivers, e.ExcludedDrivers...)
+		ret.HiddenUpdateID = append(ret.HiddenUpdateID, e.HiddenUpdateID...)
 	}
 	ret.dedupe()
 	return ret, nil
@@ -128,6 +130,7 @@ func uniqueDriverExclude(list []DriverExclude) []DriverExclude {
 func (e *Enforcements) dedupe() {
 	e.Required = uniqueStrings(e.Required)
 	e.Hidden = uniqueStrings(e.Hidden)
+	e.HiddenUpdateID = uniqueStrings(e.HiddenUpdateID)
 	e.ExcludedDrivers = uniqueDriverExclude(e.ExcludedDrivers)
 }
 

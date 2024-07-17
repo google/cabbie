@@ -308,6 +308,12 @@ func enforce() error {
 			deck.ErrorA(failures).With(eventID(cablib.EvtErrHide)).Go()
 		}
 	}
+	if len(updates.HiddenUpdateID) > 0 {
+		if err := hideByUpdateID(updates.HiddenUpdateID); err != nil {
+			failures = fmt.Errorf("error hiding updates by update ID: %v", err)
+			deck.ErrorA(failures).With(eventID(cablib.EvtErrHide)).Go()
+		}
+	}
 	return failures
 }
 

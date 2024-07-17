@@ -128,3 +128,27 @@ func hide(kbs KBSet) error {
 
 	return nil
 }
+
+func hideByUpdateID(uuids []string) error {
+	// Find non-hidden updates that are installed or not installed.
+	uc, err := findUpdates("IsHidden=0 and IsInstalled=0 or IsHidden=0 and IsInstalled=1")
+	if err != nil {
+		return err
+	}
+	defer uc.Close()
+
+	deck.InfofA("Found %d matching updates.", len(uc.Updates)).With(eventID(cablib.EvtHide)).Go()
+
+	for _, u := range uc.Updates {
+		for _, uuid := range uuids {
+			if uuid == u.Identity.UpdateID {
+				deck.InfofA("Hiding update by UpdateID:\n%s", u.Title).With(eventID(cablib.EvtHide)).Go()
+				if err := u.Hide(); err != nil {
+					deck.ErrorfA("Failed to hide update %s:\n %s", u.Title, err).With(eventID(cablib.EvtErrHide)).Go()
+				}
+			}
+		}
+	}
+
+	return nil
+}
