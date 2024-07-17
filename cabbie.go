@@ -314,6 +314,10 @@ func enforce() error {
 			deck.ErrorA(failures).With(eventID(cablib.EvtErrHide)).Go()
 		}
 	}
+	if err := unHideUpdates(updates); err != nil {
+		failures = fmt.Errorf("error unhiding updates: %v", err)
+		deck.ErrorA(failures).With(eventID(cablib.EvtErrUnhide)).Go()
+	}
 	return failures
 }
 
