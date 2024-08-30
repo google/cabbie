@@ -28,6 +28,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sys/windows"
+
 	"flag"
 	"github.com/google/cabbie/metrics"
 	"github.com/google/cabbie/notification"
@@ -46,11 +48,12 @@ import (
 )
 
 var (
-	runInDebug       = flag.Bool("debug", false, "Run in debug mode")
-	config           = new(Settings)
-	categoryDefaults = []string{"Critical Updates", "Definition Updates", "Security Updates"}
-	rebootEvent      = make(chan bool, 10)
-	rebootActive     = false
+	runInDebug        = flag.Bool("debug", false, "Run in debug mode")
+	runNormalPriority = flag.Bool("normalpriority", false, "If specified cabbie runs at normal priority rather than lowering the process priority")
+	config            = new(Settings)
+	categoryDefaults  = []string{"Critical Updates", "Definition Updates", "Security Updates"}
+	rebootEvent       = make(chan bool, 10)
+	rebootActive      = false
 
 	excludedDrivers driverExcludes
 
@@ -554,9 +557,32 @@ func enableThirdPartyUpdates() error {
 	return m.AddService(servicemgr.MicrosoftUpdate)
 }
 
+// Lower the priority of the Cabbie process to IDLE_PRIORITY_CLASS in the OS scheduler and begin
+// background processing to limit user impact see:
+// https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setpriorityclass
+func lowerProcessPriority() error {
+	c, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.PROCESS_SET_INFORMATION, false, uint32(os.Getpid()))
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(c)
+
+	if err := windows.SetPriorityClass(c, windows.IDLE_PRIORITY_CLASS); err != nil {
+		return err
+	}
+
+	return windows.SetPriorityClass(c, windows.PROCESS_MODE_BACKGROUND_BEGIN)
+}
+
 func main() {
 	flag.Parse()
 	var err error
+
+	if !*runNormalPriority {
+		if err := lowerProcessPriority(); err != nil {
+			deck.ErrorfA("Failed to lower process priority: %v", err).With(eventID(cablib.EvtErrMisc)).Go()
+		}
+	}
 
 	if *runInDebug {
 		deck.Add(logger.Init(os.Stdout, 0))
