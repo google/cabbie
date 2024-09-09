@@ -45,6 +45,7 @@ import (
 	"golang.org/x/sys/windows/svc/debug"
 	"golang.org/x/sys/windows/svc"
 	"github.com/google/subcommands"
+	glazos "github.com/google/glazier/go/os"
 )
 
 var (
@@ -394,6 +395,10 @@ func runMainLoop() error {
 				deck.ErrorfA("Error getting maintenance window %q with error:\n%v", config.AukeraName, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
 				break
 			}
+			ah, err := client.Label(int(config.AukeraPort), `active_hours`)
+			if err != nil {
+				deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
+			}
 			if *runInDebug {
 				fmt.Printf("Cabbie maintenance window schedule:\n%+v", s)
 			}
@@ -401,15 +406,38 @@ func runMainLoop() error {
 				deck.ErrorfA("Aukera maintenance window label %q not found, skipping update check...", config.AukeraName).With(eventID(cablib.EvtErrMaintWindow)).Go()
 				break
 			}
-			if s[0].State == "open" {
-				i := installCmd{Interactive: false}
-				err := i.installUpdates()
-				if e := updateInstallSuccess.Set(err == nil); e != nil {
-					deck.ErrorfA("Error posting updateInstallSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
+			osType, err := glazos.GetType()
+			if err != nil {
+				deck.ErrorfA("Error machine type with error:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
+			}
+			if (osType == glazos.Client) && (len(ah) != 0) {
+				// We're trimming the leading and trailing hours from the active hours window.
+				// As long as the current time is within the trimmed window and the current day is
+				// within the standard `cabbie` maintenance window, we'll install updates.
+				// TODO(b/365508679): Consider an additional "deadline" timer after week one
+				// to attempt to install updates daily during this trimmed window.
+				if (ah[0].Opens.Add(time.Hour).Before(time.Now())) && (ah[0].Closes.Add(-time.Hour).After(time.Now())) && (s[0].Opens.Day() == time.Now().Day()) {
+					i := installCmd{Interactive: false}
+					err := i.installUpdates()
+					if e := updateInstallSuccess.Set(err == nil); e != nil {
+						deck.ErrorfA("Error posting updateInstallSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
+					}
+					if err != nil {
+						deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
+					}
 				}
-				setRebootMetric()
-				if err != nil {
-					deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
+			} else {
+				// If we're a server, or we don't have an active hours window, we'll install updates
+				// as long as the standard `cabbie` maintenance window is open.
+				if s[0].State == "open" {
+					i := installCmd{Interactive: false}
+					err := i.installUpdates()
+					if e := updateInstallSuccess.Set(err == nil); e != nil {
+						deck.ErrorfA("Error posting updateInstallSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
+					}
+					if err != nil {
+						deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
+					}
 				}
 			}
 		case <-t.List.C:
