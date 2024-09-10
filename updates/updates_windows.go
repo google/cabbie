@@ -60,10 +60,21 @@ func New(item *ole.IDispatch) (*Update, []error) {
 				continue
 			}
 		}
-
-		v, err := oleutil.GetProperty(u.Item, p)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("get property %q: %w", p, err))
+		var v *ole.VARIANT
+		var err error
+		retries := 0
+		for {
+			v, err = oleutil.GetProperty(u.Item, p)
+			if err == nil {
+				break
+			}
+			if retries >= 1 {
+				errs = append(errs, fmt.Errorf("get property %q: %w", p, err))
+				break
+			}
+			retries++
+		}
+		if len(errs) > 0 {
 			continue
 		}
 
