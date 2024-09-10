@@ -63,6 +63,12 @@ func New(item *ole.IDispatch) (*Update, []error) {
 
 		v, err := oleutil.GetProperty(u.Item, p)
 		if err != nil {
+			if p == "IsDownloaded" {
+				// Certain properties are not available on all updates.
+				// https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nn-wuapi-iupdate#remarks
+				// Skip these properties instead of returning an error.
+				continue
+			}
 			errs = append(errs, fmt.Errorf("get property %q: %w", p, err))
 			continue
 		}
