@@ -567,11 +567,7 @@ func lowerProcessPriority() error {
 	}
 	defer windows.CloseHandle(c)
 
-	if err := windows.SetPriorityClass(c, windows.IDLE_PRIORITY_CLASS); err != nil {
-		return err
-	}
-
-	return windows.SetPriorityClass(c, windows.PROCESS_MODE_BACKGROUND_BEGIN)
+	return windows.SetPriorityClass(c, windows.IDLE_PRIORITY_CLASS)
 }
 
 func main() {
