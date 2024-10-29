@@ -561,13 +561,7 @@ func enableThirdPartyUpdates() error {
 // background processing to limit user impact see:
 // https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setpriorityclass
 func lowerProcessPriority() error {
-	c, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.PROCESS_SET_INFORMATION, false, uint32(os.Getpid()))
-	if err != nil {
-		return err
-	}
-	defer windows.CloseHandle(c)
-
-	return windows.SetPriorityClass(c, windows.IDLE_PRIORITY_CLASS)
+	return windows.SetPriorityClass(windows.CurrentProcess(), windows.IDLE_PRIORITY_CLASS)
 }
 
 func main() {
