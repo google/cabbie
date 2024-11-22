@@ -76,6 +76,16 @@ func (i *Installer) Uninstall() error {
 	return nil
 }
 
+// Commit finalizes updates that were previously staged or installed.
+// https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nf-wuapi-iupdateinstaller4-commit
+func (i *Installer) Commit() error {
+	r, err := oleutil.CallMethod(i.IUpdateInstaller, "Commit")
+	if err != nil {
+		return fmt.Errorf("commit error: [%s] [%v]", errors.UpdateError(r.Val), err)
+	}
+	return nil
+}
+
 // IsBusy gets a Boolean value that indicates whether an installation or uninstallation is in progress.
 func (i *Installer) IsBusy() (bool, error) {
 	p, err := oleutil.GetProperty(i.IUpdateInstaller, "IsBusy")
