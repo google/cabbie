@@ -34,7 +34,70 @@ var (
 	// IIDIWindowsDriverUpdate is the GUID for the IWindowsDriverUpdate COM interface.
 	// See: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-uamg/e839e7e0-1795-451b-94ef-abacd6cbecac
 	IIDIWindowsDriverUpdate = ole.NewGUID("B383CD1A-5CE9-4504-9F63-764B1236F191")
+	sleepWaitTime           = 30 * time.Minute
 )
+
+// AddRebootUpdates adds a reboot-required update list of KBs to the registry.
+func AddRebootUpdates(kbs []string) error {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer k.Close()
+
+	return k.SetStringsValue(`RebootUpdates`, kbs)
+}
+
+// GetRebootUpdates retrieves the reboot-required update list of KBs from the registry.
+func GetRebootUpdates() ([]string, error) {
+	var kbs []string
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.READ)
+	if err != nil {
+		return kbs, err
+	}
+	defer k.Close()
+
+	kbs, _, err = k.GetStringsValue(`RebootUpdates`)
+	if err != nil && err != registry.ErrNotExist {
+		return kbs, fmt.Errorf("unable to get updates requiring reboot: %v", err)
+	}
+
+	return kbs, nil
+}
+
+// cleanRebootUpdatesValue clears the reboot-required update list from the registry.
+func cleanRebootUpdatesValue() error {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer k.Close()
+
+	return k.DeleteValue(`RebootUpdates`)
+}
+
+// SetInstallAtShutdown sets a flag to force Feature Updates to install on reboot to the registry.
+// https://dennisbabkin.com/blog/?t=how-to-enable-installation-of-updates-or-to-prevent-it-during-reboot-or-shutdown
+func SetInstallAtShutdown() error {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Orchestrator\`, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer k.Close()
+
+	return k.SetDWordValue(`InstallAtShutdown`, 1)
+}
+
+// cleanInstallAtShutdownValue removes a flag to force Feature Updates to install on reboot to the registry.
+func cleanInstallAtShutdownValue() error {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Orchestrator\`, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer k.Close()
+
+	return k.DeleteValue(`InstallAtShutdown`)
+}
 
 // SetRebootTime creates the reboot time key.
 func SetRebootTime(seconds uint64) error {
@@ -99,12 +162,17 @@ func cleanRebootValue() error {
 func SystemReboot(t time.Time) error {
 	time.Sleep(time.Until(t))
 
-	notification.RebootPopup(20).Push()
+	notification.RebootPopup(30).Push()
 
-	time.Sleep(20 * time.Minute)
+	time.Sleep(sleepWaitTime)
 
 	if err := cleanRebootValue(); err != nil {
 		return fmt.Errorf("failed to clean up registry value %q: %v", rebootValue, err)
+	}
+	if err := cleanRebootUpdatesValue(); err != nil {
+		if err != registry.ErrNotExist {
+			return fmt.Errorf("failed to clear updates requiring reboot from registry: %v", err)
+		}
 	}
 	return power.Reboot(power.SHTDN_REASON_MAJOR_SOFTWARE, true)
 }

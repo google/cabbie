@@ -79,7 +79,9 @@ func (i *Installer) Uninstall() error {
 // Commit finalizes updates that were previously staged or installed.
 // https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nf-wuapi-iupdateinstaller4-commit
 func (i *Installer) Commit() error {
-	r, err := oleutil.CallMethod(i.IUpdateInstaller, "Commit")
+	// dwFlags is reserved for future use; currently passing a blank variable.
+	var dwFlags uint32
+	r, err := oleutil.CallMethod(i.IUpdateInstaller, "Commit", dwFlags)
 	if err != nil {
 		return fmt.Errorf("commit error: [%s] [%v]", errors.UpdateError(r.Val), err)
 	}

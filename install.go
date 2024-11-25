@@ -64,7 +64,10 @@ func (i *installCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&i.deadlineOnly, "deadlineOnly", false, fmt.Sprintf("Install available updates older than %d days", config.Deadline))
 }
 
-var errInvalidFlags = errors.New("invalid flag combination")
+var (
+	errInvalidFlags = errors.New("invalid flag combination")
+	rebootList      = []string{}
+)
 
 func vetFlags(i installCmd) error {
 	f := 0
@@ -97,7 +100,7 @@ func (i installCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) su
 		fmt.Println("Please reboot to finalize the update installation.")
 		return 6
 	default:
-		fmt.Println("No reboot needed.")
+		fmt.Println("Installation complete; no reboot required.")
 	}
 
 	return subcommands.ExitSuccess
@@ -182,6 +185,13 @@ func installCollection(s *session.UpdateSession, c *updatecollection.Collection)
 	}
 
 	rb, err := inst.RebootRequired()
+	if err != nil {
+		return nil, fmt.Errorf("error getting install RebootRequired:\n %v", err)
+	}
+
+	if err := inst.Commit(); err != nil {
+		return nil, fmt.Errorf("error committing updates:\n %v", err)
+	}
 
 	return &installRsp{
 		hResult:        hr,
@@ -388,11 +398,29 @@ outerLoop:
 			continue
 		}
 
-		deck.InfofA("Install Reboot Required: %t", rsp.rebootRequired).With(eventID(cablib.EvtRebootRequired)).Go()
+		deck.InfofA("Install of KB %s; Reboot Required: %t", u.KBArticleIDs, rsp.rebootRequired).With(eventID(cablib.EvtRebootRequired)).Go()
 		if !rebootRequired {
 			rebootRequired = rsp.rebootRequired
 		}
+
+		if rsp.rebootRequired && !u.InCategories([]string{"Definition Updates"}) {
+			deck.InfofA("Adding KB %s to reboot list.", u.KBArticleIDs).With(eventID(cablib.EvtRebootRequired)).Go()
+			rebootList = append(rebootList, u.KBArticleIDs...)
+		}
+
+		if rsp.rebootRequired && u.InCategories([]string{"Upgrades"}) {
+			if err := cablib.SetInstallAtShutdown(); err != nil {
+				deck.ErrorfA("Failed to set `InstallAtShutdown` registry value: %v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
+			}
+		}
+
 		c.Close()
+	}
+
+	if len(rebootList) > 0 {
+		if err := cablib.AddRebootUpdates(rebootList); err != nil {
+			deck.ErrorfA("Failed to write updates requiring reboot to registry: %v", err).With(eventID(cablib.EvtRebootRequired)).Go()
+		}
 	}
 
 	if installingMinOneUpdate {
