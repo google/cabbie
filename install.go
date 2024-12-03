@@ -31,8 +31,10 @@ import (
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatecollection"
 	"github.com/google/deck"
+	"github.com/google/aukera/client"
 	"github.com/google/subcommands"
 	"github.com/google/glazier/go/helpers"
+	glazos "github.com/google/glazier/go/os"
 )
 
 // Available flags
@@ -67,6 +69,7 @@ func (i *installCmd) SetFlags(f *flag.FlagSet) {
 var (
 	errInvalidFlags = errors.New("invalid flag combination")
 	rebootList      = []string{}
+	rebootTime      time.Time
 )
 
 func vetFlags(i installCmd) error {
@@ -141,10 +144,10 @@ func installingMessage() {
 	}
 }
 
-func rebootMessage(seconds int) {
+func rebootMessage(t time.Time) {
 	deck.InfoA("Updates have been installed, please reboot to complete the installation...").With(eventID(cablib.EvtInstallSuccess)).Go()
 
-	if err := notification.NewRebootMessage(seconds).Push(); err != nil {
+	if err := notification.NewRebootMessage(t).Push(); err != nil {
 		deck.ErrorfA("Failed to create notification:\n%v", err).With(eventID(cablib.EvtErrNotifications)).Go()
 	}
 }
@@ -201,8 +204,6 @@ func installCollection(s *session.UpdateSession, c *updatecollection.Collection)
 }
 
 func (i *installCmd) installUpdates() error {
-	var rebootRequired bool
-
 	// Check for reboot status when not installing virus definitions.
 	if !(i.virusDef) {
 		rebootRequired, err := cablib.RebootRequired()
@@ -361,6 +362,7 @@ outerLoop:
 			}
 			installingMinOneUpdate = true
 		}
+
 		deck.InfofA("Downloading Update:\n%v", u).With(eventID(cablib.EvtDownload)).Go()
 
 		rc, err := downloadCollection(s, c)
@@ -399,9 +401,6 @@ outerLoop:
 		}
 
 		deck.InfofA("Install of KB %s; Reboot Required: %t", u.KBArticleIDs, rsp.rebootRequired).With(eventID(cablib.EvtRebootRequired)).Go()
-		if !rebootRequired {
-			rebootRequired = rsp.rebootRequired
-		}
 
 		if rsp.rebootRequired && !u.InCategories([]string{"Definition Updates"}) {
 			deck.InfofA("Adding KB %s to reboot list.", u.KBArticleIDs).With(eventID(cablib.EvtRebootRequired)).Go()
@@ -421,6 +420,33 @@ outerLoop:
 		if err := cablib.AddRebootUpdates(rebootList); err != nil {
 			deck.ErrorfA("Failed to write updates requiring reboot to registry: %v", err).With(eventID(cablib.EvtRebootRequired)).Go()
 		}
+
+		ah, err := client.Label(int(config.AukeraPort), `active_hours`)
+		if err != nil {
+			deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
+		}
+
+		osType, err := glazos.GetType()
+		if err != nil {
+			deck.ErrorfA("Error machine type with error:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
+		}
+
+		// Use active hours for client machines.
+		if osType == glazos.Client {
+			// If the active hours end time is in the future, use the end time plus 1 hour. Otherwise, use the same end time of the next day.
+			if ah[0].Closes.After(time.Now()) {
+				rebootTime = ah[0].Closes.Add(time.Hour * time.Duration(1))
+			} else {
+				rebootTime = ah[0].Closes.Add(time.Hour * time.Duration(25))
+			}
+		} else {
+			rebootTime = time.Now().Add(time.Second * time.Duration(config.RebootDelay))
+		}
+		rebootMessage(rebootTime)
+		if err := cablib.SetRebootTime(rebootTime); err != nil {
+			deck.ErrorfA("Failed to set reboot time:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
+		}
+		rebootEvent <- true
 	}
 
 	if installingMinOneUpdate {
@@ -433,14 +459,6 @@ outerLoop:
 				deck.ErrorfA("PostUpdateScript: error executing script:\n%v", err).With(eventID(cablib.EvtErrUpdateScript)).Go()
 			}
 		}
-	}
-
-	if rebootRequired {
-		rebootMessage(int(config.RebootDelay))
-		if err := cablib.SetRebootTime(config.RebootDelay); err != nil {
-			deck.ErrorfA("Failed to run reboot command:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
-		}
-		rebootEvent <- rebootRequired
 	}
 
 	return nil
