@@ -45,6 +45,7 @@ import (
 	"golang.org/x/sys/windows/svc/debug"
 	"golang.org/x/sys/windows/svc"
 	"github.com/google/subcommands"
+	gos "github.com/google/glazier/go/os"
 )
 
 var (
@@ -381,35 +382,72 @@ func runMainLoop() error {
 		case <-t.Default.C:
 			i := installCmd{Interactive: false}
 			err := i.installUpdates()
+			if err != nil {
+				deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
+			}
 			if e := updateInstallSuccess.Set(err == nil); e != nil {
 				deck.ErrorfA("Error posting metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
 			}
 			setRebootMetric()
-			if err != nil {
-				deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
-			}
 		case <-t.Aukera.C:
 			s, err := client.Label(int(config.AukeraPort), config.AukeraName)
 			if err != nil {
 				deck.ErrorfA("Error getting maintenance window %q with error:\n%v", config.AukeraName, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
 				break
 			}
+			ah, err := client.Label(int(config.AukeraPort), `active_hours`)
+			if err != nil {
+				deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
+				break
+			}
 			if *runInDebug {
 				fmt.Printf("Cabbie maintenance window schedule:\n%+v", s)
+				fmt.Printf("Cabbie active hours schedule:\n%+v", ah)
 			}
 			if len(s) == 0 {
 				deck.ErrorfA("Aukera maintenance window label %q not found, skipping update check...", config.AukeraName).With(eventID(cablib.EvtErrMaintWindow)).Go()
 				break
 			}
-			if s[0].State == "open" {
-				i := installCmd{Interactive: false}
-				err := i.installUpdates()
-				if e := updateInstallSuccess.Set(err == nil); e != nil {
-					deck.ErrorfA("Error posting updateInstallSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
+			osType, err := gos.GetType()
+			if err != nil {
+				deck.ErrorfA("Error machine type with error:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
+			}
+			if (osType == gos.Client) && (len(ah) != 0) {
+				trimmedOpen := ah[0].Opens.Add(time.Hour)
+				trimmedClose := ah[0].Closes.Add(-time.Hour)
+				now := time.Now()
+				today := time.Now().Day()
+				maintDay := s[0].Opens.Day()
+				tomorrow := today + 1
+				// We're trimming the leading and trailing hours from the active hours window.
+				// As long as the current time is within the trimmed window and the current day is
+				// within the standard `cabbie` maintenance window (or day after), we'll install updates.
+				// TODO: Consider an additional "deadline" timer after week one
+				// to attempt to install updates daily during this trimmed window.
+				if trimmedOpen.Before(now) && trimmedClose.After(now) && ((maintDay == today) || (maintDay == tomorrow)) {
+					i := installCmd{Interactive: false}
+					err := i.installUpdates()
+					if err != nil {
+						deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
+					}
+					if e := updateInstallSuccess.Set(err == nil); e != nil {
+						deck.ErrorfA("Error posting updateInstallSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
+					}
+					setRebootMetric()
 				}
-				setRebootMetric()
-				if err != nil {
-					deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
+			} else {
+				// If we're a server, or we don't have an active hours window, we'll install updates
+				// as long as the standard `cabbie` maintenance window is open.
+				if s[0].State == "open" {
+					i := installCmd{Interactive: false}
+					err := i.installUpdates()
+					if err != nil {
+						deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
+					}
+					if e := updateInstallSuccess.Set(err == nil); e != nil {
+						deck.ErrorfA("Error posting updateInstallSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
+					}
+					setRebootMetric()
 				}
 			}
 		case <-t.List.C:

@@ -100,14 +100,13 @@ func cleanInstallAtShutdownValue() error {
 }
 
 // SetRebootTime creates the reboot time key.
-func SetRebootTime(seconds uint64) error {
+func SetRebootTime(t time.Time) error {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.SET_VALUE)
 	if err != nil {
 		return err
 	}
 	defer k.Close()
 
-	t := now().Add(time.Second * time.Duration(seconds))
 	b, err := t.MarshalBinary()
 	if err != nil {
 		return err

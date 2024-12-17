@@ -22,5 +22,6 @@ require (
 	github.com/iamacarpet/go-win64api v0.0.0-20210311141720-fe38760bed28 // indirect
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/StackExchange/wmi v1.2.0 // indirect
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 // indirect
 )

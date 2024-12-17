@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -27,6 +28,7 @@ const (
 )
 
 var (
+	fakeUpdates = []string{"123456", "234567"}
 	fakeTimeNow = func() time.Time {
 		return time.Date(2009, 11, 17, 20, 34, 58, 651387237, time.UTC)
 	}
@@ -71,6 +73,51 @@ func setBinarykey(t time.Time) error {
 	return k.SetBinaryValue(rebootValue, b)
 }
 
+func TestAddGetRebootUpdatesSuccess(t *testing.T) {
+	// Setup
+	RegPath = testPath
+	if err := createTestKeys(); err != nil {
+		t.Fatal(err)
+	}
+	defer cleanupTestKey()
+	// End Setup
+	if err := AddRebootUpdates(fakeUpdates); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetRebootUpdates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cmp.Equal(got, fakeUpdates) {
+		t.Errorf("GetRebootUpdates() = %v, want %v", got, fakeUpdates)
+	}
+}
+
+func TestAddGetRebootUpdatesFailure(t *testing.T) {
+	// Setup
+	RegPath = testPath
+	if err := createTestKeys(); err != nil {
+		t.Fatal(err)
+	}
+	defer cleanupTestKey()
+	// End Setup
+	if err := AddRebootUpdates(fakeUpdates); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanRebootUpdatesValue(); err != nil {
+		t.Fatal(err)
+	}
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.READ)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Close()
+
+	if _, _, err = k.GetStringsValue(`RebootUpdates`); err != registry.ErrNotExist || err == nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSetRebootTime(t *testing.T) {
 	// Setup
 	now = fakeTimeNow
@@ -81,11 +128,11 @@ func TestSetRebootTime(t *testing.T) {
 	defer cleanupTestKey()
 	// End Setup
 	for _, tt := range []struct {
-		in  uint64
+		in  time.Time
 		val []byte
 	}{
-		{uint64(200), []byte{1, 0, 0, 0, 14, 194, 149, 0, 186, 38, 211, 97, 101, 255, 255}},
-		{uint64(0), []byte{1, 0, 0, 0, 14, 194, 148, 255, 242, 38, 211, 97, 101, 255, 255}},
+		{now().Add(time.Second * time.Duration(200)), []byte{1, 0, 0, 0, 14, 194, 149, 0, 186, 38, 211, 97, 101, 255, 255}},
+		{now(), []byte{1, 0, 0, 0, 14, 194, 148, 255, 242, 38, 211, 97, 101, 255, 255}},
 	} {
 		err := SetRebootTime(tt.in)
 		if err != nil {

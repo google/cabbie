@@ -26,12 +26,12 @@ import (
 )
 
 // NewRebootMessage returns a standard reboot message.
-func NewRebootMessage(seconds int) Notification {
-	t := time.Now().Add(time.Second * time.Duration(seconds)).Format(time.UnixDate)
+func NewRebootMessage(t time.Time) Notification {
+	tf := t.Format(time.UnixDate)
 	return &toast.Notification{
 		AppID:   appID,
 		Title:   "Reboot Your Machine",
-		Message: fmt.Sprintf("Reboot now to finish installing updates. Your machine will auto reboot at %s.", t),
+		Message: fmt.Sprintf("Reboot now to finish installing updates. Your machine will auto reboot at %s.", tf),
 	}
 }
 
