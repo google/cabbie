@@ -34,7 +34,7 @@ import (
 	"github.com/google/aukera/client"
 	"github.com/google/subcommands"
 	"github.com/google/glazier/go/helpers"
-	glazos "github.com/google/glazier/go/os"
+	gos "github.com/google/glazier/go/os"
 )
 
 // Available flags
@@ -438,7 +438,7 @@ outerLoop:
 			deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
 		}
 
-		osType, err := glazos.GetType()
+		osType, err := gos.GetType()
 		if err != nil {
 			deck.ErrorfA("Error machine type with error:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
 		}
@@ -446,7 +446,7 @@ outerLoop:
 		// Use active hours for client machines.
 		now := time.Now()
 		timerEnd := now.Add(time.Second * time.Duration(config.RebootDelay))
-		if osType == glazos.Client {
+		if (osType == gos.Client) && (len(ah) != 0) {
 			todayEnd := ah[0].Closes
 			tomorrowEnd := todayEnd.Add(time.Hour * time.Duration(24))
 			// If the active hours end time is in the future, use the end time.
