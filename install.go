@@ -166,7 +166,7 @@ func downloadCollection(s *session.UpdateSession, c *updatecollection.Collection
 	return d.ResultCode()
 }
 
-func installCollection(s *session.UpdateSession, c *updatecollection.Collection) (*installRsp, error) {
+func installCollection(s *session.UpdateSession, c *updatecollection.Collection, ipu bool) (*installRsp, error) {
 	inst, err := install.NewInstaller(s, c)
 	if err != nil {
 		return nil, fmt.Errorf("error creating installer: \n %v", err)
@@ -192,9 +192,11 @@ func installCollection(s *session.UpdateSession, c *updatecollection.Collection)
 		return nil, fmt.Errorf("error getting install RebootRequired:\n %v", err)
 	}
 
-	if err := inst.Commit(); err != nil {
-		return nil, fmt.Errorf("error committing updates:\n %v", err)
-	}
+	if ipu {
+		if err := inst.Commit(); err != nil {
+			return nil, fmt.Errorf("error committing updates:\n %v", err)
+		}
+  }
 
 	return &installRsp{
 		hResult:        hr,
@@ -222,9 +224,14 @@ func (i *installCmd) installUpdates() error {
 				return fmt.Errorf("Error getting reboot time: %v", err)
 			}
 			if t.IsZero() {
-				// Don't trigger a reboot if one is pending but no time has been set.
-				// This can happen when updates are installed outside of Cabbie.
-				return nil
+				// Set reboot time if a reboot is pending but no time has been set.
+				// This can happen when a user installs updates outside of Cabbie
+				// or if Cabbie encountered an error during the previous install.
+				rebootTime := time.Now().Add(time.Second * time.Duration(config.RebootDelay))
+				rebootMessage(rebootTime)
+				if err := cablib.SetRebootTime(rebootTime); err != nil {
+					return fmt.Errorf("Failed to set reboot time:\n%v", err)
+				}
 			}
 			rebootEvent <- rebootRequired
 			return nil
@@ -382,7 +389,12 @@ outerLoop:
 
 		deck.InfofA("Installing Update:\n%v", u).With(eventID(cablib.EvtInstall)).Go()
 
-		rsp, err := installCollection(s, c)
+		ipu := false
+		if u.InCategories([]string{"Upgrades"}) {
+			ipu = true
+		}
+
+		rsp, err := installCollection(s, c, ipu)
 		if err != nil {
 			deck.ErrorA(err).With(eventID(cablib.EvtErrMisc)).Go()
 			c.Close()
