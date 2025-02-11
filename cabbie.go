@@ -418,13 +418,14 @@ func runMainLoop() error {
 				now := time.Now()
 				today := time.Now().Day()
 				maintDay := s[0].Opens.Day()
-				tomorrow := today + 1
+				plusWeek := today + 7
 				// We're trimming the leading and trailing hours from the active hours window.
 				// As long as the current time is within the trimmed window and the current day is
-				// within the standard `cabbie` maintenance window (or day after), we'll install updates.
-				// TODO: Consider an additional "deadline" timer after week one
-				// to attempt to install updates daily during this trimmed window.
-				if trimmedOpen.Before(now) && trimmedClose.After(now) && ((maintDay == today) || (maintDay == tomorrow)) {
+				// the start of the standard `cabbie` maintenance window, we'll install updates.
+				//
+				// Additionally, we will attempt to install updates daily during this window for one week
+				// after the maintenance window starts. This is independent of the deadline logic.
+				if trimmedOpen.Before(now) && trimmedClose.After(now) && ((maintDay >= today) && (maintDay < plusWeek)) {
 					i := installCmd{Interactive: false}
 					err := i.installUpdates()
 					if err != nil {
