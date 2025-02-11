@@ -413,19 +413,22 @@ func runMainLoop() error {
 				deck.ErrorfA("Error machine type with error:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
 			}
 			if (osType == gos.Client) && (len(ah) != 0) {
+				deck.InfofA("Client machine detected with active hours aukera window present; using active hours schedule.").With(eventID(cablib.EvtMisc)).Go()
 				trimmedOpen := ah[0].Opens.Add(time.Hour)
 				trimmedClose := ah[0].Closes.Add(-time.Hour)
 				now := time.Now()
 				today := time.Now().Day()
 				maintDay := s[0].Opens.Day()
 				plusWeek := today + 7
+				deck.InfofA("Cabbie Timers:\nNow: %v\nTrimmed Active Hours Open Time: %v\nTrimmed Active Hours Close Time: %v\nToday: %v\nMaintenance Day: %v\nPlus Week: %v\n", now, trimmedOpen, trimmedClose, today, maintDay, plusWeek).With(eventID(cablib.EvtMisc)).Go()
 				// We're trimming the leading and trailing hours from the active hours window.
 				// As long as the current time is within the trimmed window and the current day is
 				// the start of the standard `cabbie` maintenance window, we'll install updates.
 				//
 				// Additionally, we will attempt to install updates daily during this window for one week
 				// after the maintenance window starts. This is independent of the deadline logic.
-				if trimmedOpen.Before(now) && trimmedClose.After(now) && ((maintDay >= today) && (maintDay < plusWeek)) {
+				if trimmedOpen.Before(now) && trimmedClose.After(now) && ((today >= maintDay) && (today < plusWeek)) {
+					deck.InfofA("Active Hours + Maintenance window open: Starting installation process.").With(eventID(cablib.EvtInstall)).Go()
 					i := installCmd{Interactive: false}
 					err := i.installUpdates()
 					if err != nil {
@@ -437,9 +440,11 @@ func runMainLoop() error {
 					setRebootMetric()
 				}
 			} else {
+				deck.InfofA("Server machine detected or no active hours aukera window present; using standard maintenance window schedule.").With(eventID(cablib.EvtMisc)).Go()
 				// If we're a server, or we don't have an active hours window, we'll install updates
 				// as long as the standard `cabbie` maintenance window is open.
 				if s[0].State == "open" {
+					deck.InfofA("Maintenance window open: Starting installation process.").With(eventID(cablib.EvtInstall)).Go()
 					i := installCmd{Interactive: false}
 					err := i.installUpdates()
 					if err != nil {
