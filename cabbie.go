@@ -673,6 +673,7 @@ func main() {
 	subcommands.Register(&historyCmd{}, "Update management")
 	subcommands.Register(&installCmd{Interactive: true}, "Update management")
 	subcommands.Register(&listCmd{}, "Update management")
+	subcommands.Register(&rebootCmd{}, "Reboot management")
 	subcommands.Register(&serviceCmd{}, "Service registration management")
 
 	if *runInDebug {

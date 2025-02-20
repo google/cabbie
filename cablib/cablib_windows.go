@@ -147,7 +147,8 @@ func RebootTime() (time.Time, error) {
 	return t, nil
 }
 
-func cleanRebootValue() error {
+// ClearRebootTime deletes the reboot time key.
+func ClearRebootTime() error {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.SET_VALUE)
 	if err != nil {
 		return err
@@ -165,7 +166,7 @@ func SystemReboot(t time.Time) error {
 
 	time.Sleep(sleepWaitTime)
 
-	if err := cleanRebootValue(); err != nil {
+	if err := ClearRebootTime(); err != nil {
 		return fmt.Errorf("failed to clean up registry value %q: %v", rebootValue, err)
 	}
 	if err := cleanRebootUpdatesValue(); err != nil {
