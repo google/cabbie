@@ -418,12 +418,13 @@ func runMainLoop() error {
 				trimmedClose := ah[0].Closes.Add(-time.Hour)
 				now := time.Now()
 				today := time.Now().Day()
-				maintDay := s[0].Opens.Day()
-				deck.InfofA("Cabbie Timers:\nNow: %v\nTrimmed Active Hours Open Time: %v\nTrimmed Active Hours Close Time: %v\nToday: %v\nMaintenance Day: %v\n", now, trimmedOpen, trimmedClose, today, maintDay).With(eventID(cablib.EvtMisc)).Go()
+				maintOpenDay := s[0].Opens.Day()
+				maintCloseDay := s[0].Closes.Day()
+				deck.InfofA("Cabbie Timers:\nNow: %v\nTrimmed Active Hours Open Time: %v\nTrimmed Active Hours Close Time: %v\nToday: %v\nMaintenance Open Day: %v\nMaintenance Close Day: %v\n", now, trimmedOpen, trimmedClose, today, maintOpenDay, maintCloseDay).With(eventID(cablib.EvtMisc)).Go()
 				// We're trimming the leading and trailing hours from the active hours window.
 				// As long as the current time is within the trimmed window and the current day is
-				// the start of the standard `cabbie` maintenance window, we'll install updates.
-				if trimmedOpen.Before(now) && trimmedClose.After(now) && (today == maintDay) {
+				// within the standard `cabbie` maintenance window, we'll install updates.
+				if trimmedOpen.Before(now) && trimmedClose.After(now) && ((today >= maintOpenDay) && (today <= maintCloseDay)) {
 					deck.InfofA("Active Hours + Maintenance window open: Starting installation process.").With(eventID(cablib.EvtInstall)).Go()
 					i := installCmd{Interactive: false}
 					err := i.installUpdates()
