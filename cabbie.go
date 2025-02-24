@@ -45,7 +45,6 @@ import (
 	"golang.org/x/sys/windows/svc/debug"
 	"golang.org/x/sys/windows/svc"
 	"github.com/google/subcommands"
-	gos "github.com/google/glazier/go/os"
 )
 
 var (
@@ -83,6 +82,9 @@ type Settings struct {
 	AukeraEnabled uint64
 	AukeraPort    uint64
 	AukeraName    string
+
+	// Microsoft Active Hours Integration (Requires Aukera Enabled)
+	ActiveHoursEnabled uint64
 
 	PprofPort uint64
 
@@ -194,6 +196,9 @@ func (s *Settings) regLoad(path string) error {
 	}
 	if i, _, err := k.GetIntegerValue("PprofPort"); err == nil {
 		s.PprofPort = i
+	}
+	if i, _, err := k.GetIntegerValue("ActiveHoursEnabled"); err == nil {
+		s.ActiveHoursEnabled = i
 	}
 	if i, _, err := k.GetIntegerValue("ScriptTimeout"); err == nil {
 		s.ScriptTimeout = time.Duration(i) * time.Minute
@@ -395,25 +400,28 @@ func runMainLoop() error {
 				deck.ErrorfA("Error getting maintenance window %q with error:\n%v", config.AukeraName, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
 				break
 			}
-			ah, err := client.Label(int(config.AukeraPort), `active_hours`)
-			if err != nil {
-				deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
-				break
-			}
 			if *runInDebug {
 				fmt.Printf("Cabbie maintenance window schedule:\n%+v", s)
-				fmt.Printf("Cabbie active hours schedule:\n%+v", ah)
 			}
 			if len(s) == 0 {
 				deck.ErrorfA("Aukera maintenance window label %q not found, skipping update check...", config.AukeraName).With(eventID(cablib.EvtErrMaintWindow)).Go()
 				break
 			}
-			osType, err := gos.GetType()
-			if err != nil {
-				deck.ErrorfA("Error machine type with error:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
-			}
-			if (osType == gos.Client) && (len(ah) != 0) {
-				deck.InfofA("Client machine detected with active hours aukera window present; using active hours schedule.").With(eventID(cablib.EvtMisc)).Go()
+			if config.ActiveHoursEnabled == 1 {
+				deck.InfofA("Active hours enabled: checking for active hours schedule.").With(eventID(cablib.EvtMisc)).Go()
+				ah, err := client.Label(int(config.AukeraPort), `active_hours`)
+				if err != nil {
+					deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
+					break
+				}
+				if *runInDebug {
+					fmt.Printf("Cabbie active hours schedule:\n%+v", ah)
+				}
+				if len(ah) == 0 {
+					deck.ErrorfA("Aukera maintenance window label %q not found, skipping update check...", `active_hours`).With(eventID(cablib.EvtErrMaintWindow)).Go()
+					break
+				}
+				deck.InfofA("Active hours enabled and schedule found: using active hours schedule.").With(eventID(cablib.EvtMisc)).Go()
 				trimmedOpen := ah[0].Opens.Add(time.Hour)
 				trimmedClose := ah[0].Closes.Add(-time.Hour)
 				now := time.Now()
@@ -437,7 +445,7 @@ func runMainLoop() error {
 					setRebootMetric()
 				}
 			} else {
-				deck.InfofA("Server machine detected or no active hours aukera window present; using standard maintenance window schedule.").With(eventID(cablib.EvtMisc)).Go()
+				deck.InfofA("Active hours disabled; using standard maintenance window schedule.").With(eventID(cablib.EvtMisc)).Go()
 				// If we're a server, or we don't have an active hours window, we'll install updates
 				// as long as the standard `cabbie` maintenance window is open.
 				if s[0].State == "open" {

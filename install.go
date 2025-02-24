@@ -34,7 +34,6 @@ import (
 	"github.com/google/aukera/client"
 	"github.com/google/subcommands"
 	"github.com/google/glazier/go/helpers"
-	gos "github.com/google/glazier/go/os"
 )
 
 // Available flags
@@ -196,7 +195,7 @@ func installCollection(s *session.UpdateSession, c *updatecollection.Collection,
 		if err := inst.Commit(); err != nil {
 			return nil, fmt.Errorf("error committing updates:\n %v", err)
 		}
-  }
+	}
 
 	return &installRsp{
 		hResult:        hr,
@@ -445,31 +444,26 @@ outerLoop:
 			deck.ErrorfA("Failed to write updates requiring reboot to registry: %v", err).With(eventID(cablib.EvtRebootRequired)).Go()
 		}
 
-		ah, err := client.Label(int(config.AukeraPort), `active_hours`)
-		if err != nil {
-			deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
-		}
-
-		osType, err := gos.GetType()
-		if err != nil {
-			deck.ErrorfA("Error machine type with error:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
-		}
-
-		// Use active hours for client machines.
+		// Use active hours if enabled and available, otherwise use the standard reboot delay.
 		now := time.Now()
 		timerEnd := now.Add(time.Second * time.Duration(config.RebootDelay))
-		if (osType == gos.Client) && (len(ah) != 0) {
-			todayEnd := ah[0].Closes
-			tomorrowEnd := todayEnd.Add(time.Hour * time.Duration(24))
-			// If the active hours end time is in the future, use the end time.
-			// Otherwise, use the same end time of the next day.
-			if todayEnd.After(now) {
-				rebootTime = todayEnd
-			} else {
-				rebootTime = tomorrowEnd
+		rebootTime := timerEnd
+		if config.ActiveHoursEnabled == 1 {
+			ah, err := client.Label(int(config.AukeraPort), `active_hours`)
+			if err != nil {
+				deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
 			}
-		} else {
-			rebootTime = timerEnd
+			if len(ah) != 0 {
+				todayEnd := ah[0].Closes
+				tomorrowEnd := todayEnd.Add(time.Hour * time.Duration(24))
+				// If the active hours end time is in the future, use the end time.
+				// Otherwise, use the same end time of the next day.
+				if todayEnd.After(now) {
+					rebootTime = todayEnd
+				} else {
+					rebootTime = tomorrowEnd
+				}
+			}
 		}
 		rebootMessage(rebootTime)
 		if err := cablib.SetRebootTime(rebootTime); err != nil {

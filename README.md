@@ -42,6 +42,7 @@ NotifyAvailable    | REG_DWORD     | 1                                          
 AukeraEnabled      | REG_DWORD     | 0                                                    | Enable Cabbie to use the open source Aukera maintenance window manager.
 AukeraPort         | REG_DWORD     | 9119                                                 | LocalHost port to check against for Aukera maintenance windows.
 AukeraName         | REG_SZ        | Cabbie                                               | Aukera maintenance window label to query for to determine if a maintenance window is currently open.
+ActiveHoursEnabled | REG_DWORD     | 0                                                    | Enable Cabbie to follow Microsoft Active Hours; requires Aukera enabled.
 ScriptTimeout      | REG_DWORD     | 10                                                   | Pre/Post Update script timeout in minutes.
 
 ### Pre/Post Update script execution
