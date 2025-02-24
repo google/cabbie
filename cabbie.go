@@ -408,27 +408,23 @@ func runMainLoop() error {
 				break
 			}
 			if config.ActiveHoursEnabled == 1 {
-				deck.InfofA("Active hours enabled: checking for active hours schedule.").With(eventID(cablib.EvtMisc)).Go()
+				deck.InfofA("Active Hours enabled: checking for active_hours schedule.").With(eventID(cablib.EvtMisc)).Go()
 				ah, err := client.Label(int(config.AukeraPort), `active_hours`)
 				if err != nil {
 					deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
 					break
 				}
-				if *runInDebug {
-					fmt.Printf("Cabbie active hours schedule:\n%+v", ah)
-				}
 				if len(ah) == 0 {
 					deck.ErrorfA("Aukera maintenance window label %q not found, skipping update check...", `active_hours`).With(eventID(cablib.EvtErrMaintWindow)).Go()
 					break
 				}
-				deck.InfofA("Active hours enabled and schedule found: using active hours schedule.").With(eventID(cablib.EvtMisc)).Go()
 				trimmedOpen := ah[0].Opens.Add(time.Hour)
 				trimmedClose := ah[0].Closes.Add(-time.Hour)
 				now := time.Now()
 				today := time.Now().Day()
 				maintOpenDay := s[0].Opens.Day()
 				maintCloseDay := s[0].Closes.Day()
-				deck.InfofA("Cabbie Timers:\nNow: %v\nTrimmed Active Hours Open Time: %v\nTrimmed Active Hours Close Time: %v\nToday: %v\nMaintenance Open Day: %v\nMaintenance Close Day: %v\n", now, trimmedOpen, trimmedClose, today, maintOpenDay, maintCloseDay).With(eventID(cablib.EvtMisc)).Go()
+				deck.InfofA("Active Hours schedule found:\nNow: %v\nTrimmed Active Hours Open Time: %v\nTrimmed Active Hours Close Time: %v\nToday: %v\nMaintenance Open Day: %v\nMaintenance Close Day: %v\n", now, trimmedOpen, trimmedClose, today, maintOpenDay, maintCloseDay).With(eventID(cablib.EvtMisc)).Go()
 				// We're trimming the leading and trailing hours from the active hours window.
 				// As long as the current time is within the trimmed window and the current day is
 				// within the standard `cabbie` maintenance window, we'll install updates.
@@ -445,7 +441,7 @@ func runMainLoop() error {
 					setRebootMetric()
 				}
 			} else {
-				deck.InfofA("Active hours disabled; using standard maintenance window schedule.").With(eventID(cablib.EvtMisc)).Go()
+				deck.InfofA("Active Hours disabled: using standard maintenance window schedule.").With(eventID(cablib.EvtMisc)).Go()
 				// If we're a server, or we don't have an active hours window, we'll install updates
 				// as long as the standard `cabbie` maintenance window is open.
 				if s[0].State == "open" {
