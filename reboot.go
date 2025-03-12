@@ -15,6 +15,7 @@ package main
 
 import (
 	"golang.org/x/net/context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 	"github.com/google/cabbie/cablib"
 	"github.com/google/deck/backends/eventlog"
 	"github.com/google/deck"
+	"golang.org/x/sys/windows/registry"
 	"github.com/google/subcommands"
 )
 
@@ -59,6 +61,10 @@ func (c rebootCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) sub
 			deck.ErrorfA("Failed to clear reboot notification: %v", err).With(eventID(cablib.EvtErrNotifications)).Go()
 		}
 		if err := cablib.ClearRebootTime(); err != nil {
+			if errors.Is(err, registry.ErrNotExist) {
+				fmt.Printf("No Cabbie reboot time found to clear.")
+				return subcommands.ExitSuccess
+			}
 			fmt.Printf("Failed to clear reboot time: %v", err)
 			return subcommands.ExitFailure
 		}
