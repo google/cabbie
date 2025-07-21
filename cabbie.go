@@ -680,6 +680,7 @@ func main() {
 	subcommands.Register(&listCmd{}, "Update management")
 	subcommands.Register(&rebootCmd{}, "Reboot management")
 	subcommands.Register(&serviceCmd{}, "Service registration management")
+	subcommands.Register(&wsusCmd{}, "WSUS management")
 
 	if *runInDebug {
 		if err := startService(true); err != nil {

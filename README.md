@@ -127,6 +127,13 @@ Uninstall Cabbie service:
 
 `cabbie service --uninstall`
 
+### Wsus
+
+Initializes the wsus server configuration and restarts the windows update
+service.
+
+`cabbie wsus`
+
 ## Service Usage
 
 Cabbie can run as a Windows Service to enable constant update and reboot
