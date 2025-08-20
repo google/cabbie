@@ -115,6 +115,22 @@ Make an update available for install:
 
 `cabbie hide --unhide --kbs="1234513"`
 
+### Reboot
+
+Manage the pending reboot state of the machine.
+
+Clear pending reboots:
+
+`cabbie reboot --clear`
+
+Initiate reboot after some time in seconds:
+
+`cabbie reboot --time 600`
+
+Check if there is a pending reboot and display the time:
+
+`cabbie reboot --check`
+
 ### Service
 
 Manage the installation status of the Cabbie service.
