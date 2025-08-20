@@ -42,7 +42,7 @@ func (rebootCmd) Synopsis() string {
 	return "manually set or clear the Cabbie reboot time Registry key."
 }
 func (rebootCmd) Usage() string {
-	return fmt.Sprintf("%s reboot [--clear] [--time <seconds>]\n", filepath.Base(os.Args[0]))
+	return fmt.Sprintf("%s reboot [--check | --clear | --time <seconds>]\n", filepath.Base(os.Args[0]))
 }
 func (c *rebootCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.clear, "clear", false, "Clear the reboot time if set.")
