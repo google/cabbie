@@ -45,9 +45,9 @@ func (rebootCmd) Usage() string {
 	return fmt.Sprintf("%s reboot [--clear] [--time <seconds>]\n", filepath.Base(os.Args[0]))
 }
 func (c *rebootCmd) SetFlags(f *flag.FlagSet) {
-	f.BoolVar(&c.clear, "clear", false, "clear the reboot time if set.")
-	f.Uint64Var(&c.time, "time", 0, "set the reboot time in seconds.")
-	f.BoolVar(&c.check, "check", false, "get if a reboot is pending.")
+	f.BoolVar(&c.clear, "clear", false, "Clear the reboot time if set.")
+	f.Uint64Var(&c.time, "time", 0, "Set the reboot time in seconds.")
+	f.BoolVar(&c.check, "check", false, "Check if a reboot is pending, and display the time if present.")
 }
 
 func (c rebootCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subcommands.ExitStatus {
@@ -55,7 +55,7 @@ func (c rebootCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) sub
 	rc := subcommands.ExitSuccess
 	if !c.clear && c.time == 0 && !c.check {
 		fmt.Println(c.Usage())
-		fmt.Println("Either --clear, --time (non-zero), or --check must be set.")
+		fmt.Println("One of --clear, --time (non-zero), or --check must be set.")
 		return subcommands.ExitFailure
 	}
 	if c.clear {
