@@ -205,6 +205,11 @@ func installCollection(s *session.UpdateSession, c *updatecollection.Collection,
 }
 
 func (i *installCmd) installUpdates() error {
+	// If monthly patches are disabled, and no specific update type was requested, do nothing.
+	if config.InstallMonthlyPatches == 0 && !i.all && !i.drivers && !i.virusDef && i.kbs == "" {
+		deck.InfoA("InstallMonthlyPatches is disabled, skipping default update installation.").With(eventID(cablib.EvtMisc)).Go()
+		return nil
+	}
 	// Check for reboot status when not installing virus definitions.
 	if !(i.virusDef) {
 		rebootRequired, err := cablib.RebootRequired()

@@ -75,8 +75,8 @@ var (
 
 // Settings contains configurable options.
 type Settings struct {
-	WSUSServers, RequiredCategories                                                         []string
-	UpdateDrivers, UpdateVirusDef, EnableThirdParty, RebootDelay, Deadline, NotifyAvailable uint64
+	WSUSServers, RequiredCategories                                                                                       []string
+	InstallDrivers, InstallVirusDefs, EnableThirdParty, RebootDelay, Deadline, EnableNotifications, InstallMonthlyPatches uint64
 
 	// Aukera Integration
 	AukeraEnabled uint64
@@ -135,14 +135,15 @@ func (t *tickers) stop() {
 func newSettings() *Settings {
 	// Set non-Zero defaults.
 	return &Settings{
-		AukeraName:         cablib.SvcName,
-		RequiredCategories: categoryDefaults,
-		UpdateVirusDef:     1,
-		RebootDelay:        21600,
-		Deadline:           14,
-		NotifyAvailable:    1,
-		AukeraPort:         9119,
-		ScriptTimeout:      10 * time.Minute,
+		AukeraName:            cablib.SvcName,
+		RequiredCategories:    categoryDefaults,
+		InstallVirusDefs:      1,
+		InstallMonthlyPatches: 1,
+		RebootDelay:           21600,
+		Deadline:              14,
+		EnableNotifications:   1,
+		AukeraPort:            9119,
+		ScriptTimeout:         10 * time.Minute,
 	}
 }
 
@@ -173,11 +174,17 @@ func (s *Settings) regLoad(path string) error {
 	if i, _, err := k.GetIntegerValue("EnableThirdParty"); err == nil {
 		s.EnableThirdParty = i
 	}
-	if i, _, err := k.GetIntegerValue("UpdateDrivers"); err == nil {
-		s.UpdateDrivers = i
+	if i, _, err := k.GetIntegerValue("InstallDrivers"); err == nil {
+		s.InstallDrivers = i
+	} else if i, _, err := k.GetIntegerValue("UpdateDrivers"); err == nil {
+		s.InstallDrivers = i
+		deck.WarningfA("Registry setting 'UpdateDrivers' is deprecated and will be removed in a future version. Please use 'InstallDrivers' instead.").With(eventID(cablib.EvtErrConfig)).Go()
 	}
-	if i, _, err := k.GetIntegerValue("UpdateVirusDef"); err == nil {
-		s.UpdateVirusDef = i
+	if i, _, err := k.GetIntegerValue("InstallVirusDefs"); err == nil {
+		s.InstallVirusDefs = i
+	} else if i, _, err := k.GetIntegerValue("UpdateVirusDef"); err == nil {
+		s.InstallVirusDefs = i
+		deck.WarningfA("Registry setting 'UpdateVirusDef' is deprecated and will be removed in a future version. Please use 'InstallVirusDefs' instead.").With(eventID(cablib.EvtErrConfig)).Go()
 	}
 	if i, _, err := k.GetIntegerValue("RebootDelay"); err == nil {
 		s.RebootDelay = i
@@ -185,8 +192,11 @@ func (s *Settings) regLoad(path string) error {
 	if i, _, err := k.GetIntegerValue("Deadline"); err == nil {
 		s.Deadline = i
 	}
-	if i, _, err := k.GetIntegerValue("NotifyAvailable"); err == nil {
-		s.NotifyAvailable = i
+	if i, _, err := k.GetIntegerValue("EnableNotifications"); err == nil {
+		s.EnableNotifications = i
+	} else if i, _, err := k.GetIntegerValue("NotifyAvailable"); err == nil {
+		s.EnableNotifications = i
+		deck.WarningfA("Registry setting 'NotifyAvailable' is deprecated and will be removed in a future version. Please use 'EnableNotifications' instead.").With(eventID(cablib.EvtErrConfig)).Go()
 	}
 	if i, _, err := k.GetIntegerValue("AukeraEnabled"); err == nil {
 		s.AukeraEnabled = i
@@ -202,6 +212,9 @@ func (s *Settings) regLoad(path string) error {
 	}
 	if i, _, err := k.GetIntegerValue("ScriptTimeout"); err == nil {
 		s.ScriptTimeout = time.Duration(i) * time.Minute
+	}
+	if i, _, err := k.GetIntegerValue("InstallMonthlyPatches"); err == nil {
+		s.InstallMonthlyPatches = i
 	}
 
 	return nil
@@ -353,7 +366,7 @@ func runMainLoop() error {
 	defer t.stop()
 
 	// Run filesystem watcher for required updates configuration.
-	var enforcedFile = make(chan string)
+	enforcedFile := make(chan string)
 	go func() {
 		for {
 			if err := enforcement.Watcher(enforcedFile); err == nil {
@@ -374,11 +387,11 @@ func runMainLoop() error {
 		t.Aukera.Stop()
 	}
 
-	if config.UpdateVirusDef == 0 {
+	if config.InstallVirusDefs == 0 {
 		t.Virus.Stop()
 	}
 
-	if config.UpdateDrivers == 0 {
+	if config.InstallDrivers == 0 {
 		t.Driver.Stop()
 	}
 
@@ -481,7 +494,7 @@ func runMainLoop() error {
 				strings.Join(optionalUpdates, "\n\n"),
 			).With(eventID(cablib.EvtUpdatesFound)).Go()
 
-			if config.NotifyAvailable == 1 {
+			if config.EnableNotifications == 1 {
 				if err := notification.NewAvailableUpdateMessage().Push(); err != nil {
 					deck.ErrorfA("Failed to create notification:\n%v", err).With(eventID(cablib.EvtErrNotifications)).Go()
 				}
