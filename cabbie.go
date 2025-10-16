@@ -49,6 +49,7 @@ import (
 
 var (
 	runInDebug        = flag.Bool("debug", false, "Run in debug mode")
+	verbose           = flag.Bool("verbose", false, "Enable verbose (stdout) logging")
 	runNormalPriority = flag.Bool("normalpriority", false, "If specified cabbie runs at normal priority rather than lowering the process priority")
 	config            = new(Settings)
 	categoryDefaults  = []string{"Critical Updates", "Definition Updates", "Security Updates"}
@@ -635,6 +636,9 @@ func main() {
 	if *runInDebug {
 		deck.Add(logger.Init(os.Stdout, 0))
 	} else {
+		if *verbose {
+			deck.Add(logger.Init(os.Stdout, 0))
+		}
 		evt, err := eventlog.Init(cablib.LogSrcName)
 		if err != nil {
 			fmt.Println(err)
