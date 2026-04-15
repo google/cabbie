@@ -310,6 +310,7 @@ func setRebootMetric() {
 }
 
 func enforce() error {
+	ctx := context.Background()
 	updates, err := enforcement.Get()
 	if err != nil {
 		return fmt.Errorf("error retrieving required updates: %v", err)
@@ -320,7 +321,7 @@ func enforce() error {
 	var failures error
 	if len(updates.Required) > 0 {
 		i := installCmd{kbs: strings.Join(updates.Required, ",")}
-		if err := i.installUpdates(); err != nil {
+		if err := i.installUpdates(ctx); err != nil {
 			failures = fmt.Errorf("error enforcing required updates: %v", err)
 			deck.ErrorA(failures).With(eventID(cablib.EvtErrInstallFailure)).Go()
 		}
@@ -350,6 +351,7 @@ func initDriverExclusion() error {
 }
 
 func runMainLoop() error {
+	ctx := context.Background()
 	if err := notification.CleanNotifications(cablib.SvcName); err != nil {
 		deck.ErrorfA("Error clearing old notifications:\n%v", err).With(eventID(cablib.EvtErrNotifications)).Go()
 	}
@@ -400,7 +402,7 @@ func runMainLoop() error {
 		select {
 		case <-t.Default.C:
 			i := installCmd{Interactive: false}
-			err := i.installUpdates()
+			err := i.installUpdates(ctx)
 			if err != nil {
 				deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 			}
@@ -445,7 +447,7 @@ func runMainLoop() error {
 				if trimmedOpen.Before(now) && trimmedClose.After(now) && ((today >= maintOpenDay) && (today <= maintCloseDay)) {
 					deck.InfofA("Active Hours + Maintenance window open: Starting installation process.").With(eventID(cablib.EvtInstall)).Go()
 					i := installCmd{Interactive: false}
-					err := i.installUpdates()
+					err := i.installUpdates(ctx)
 					if err != nil {
 						deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 					}
@@ -461,7 +463,7 @@ func runMainLoop() error {
 				if s[0].State == "open" {
 					deck.InfofA("Maintenance window open: Starting installation process.").With(eventID(cablib.EvtInstall)).Go()
 					i := installCmd{Interactive: false}
-					err := i.installUpdates()
+					err := i.installUpdates(ctx)
 					if err != nil {
 						deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 					}
@@ -503,15 +505,15 @@ func runMainLoop() error {
 
 			if config.Deadline != 0 {
 				i := installCmd{Interactive: false, deadlineOnly: true}
-				if err := i.installUpdates(); err != nil {
+				if err := i.installUpdates(ctx); err != nil {
 					deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 				}
 			}
 		case <-t.Virus.C:
 			i := installCmd{Interactive: false, virusDef: true}
-			err := i.installUpdates()
+			err := i.installUpdates(ctx)
 			if e := virusUpdateSuccess.Set(err == nil); e != nil {
-				deck.ErrorfA("Error posting virusUpdateSuccess metric:\n%v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
+				deck.ErrorfA("Error posting virusUpdateSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
 			}
 			if err != nil {
 				deck.ErrorfA("Error installing virus definitions:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
@@ -519,7 +521,7 @@ func runMainLoop() error {
 			}
 		case <-t.Driver.C:
 			i := installCmd{Interactive: false, drivers: true}
-			err := i.installUpdates()
+			err := i.installUpdates(ctx)
 			if e := driverUpdateSuccess.Set(err == nil); e != nil {
 				deck.ErrorfA("Error posting driverUpdateSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
 			}

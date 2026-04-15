@@ -14,10 +14,12 @@
 package main
 
 import (
+	"bytes"
 	"golang.org/x/net/context"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -86,12 +88,12 @@ func vetFlags(i installCmd) error {
 	return nil
 }
 
-func (i installCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subcommands.ExitStatus {
+func (i installCmd) Execute(ctx context.Context, flags *flag.FlagSet, _ ...any) subcommands.ExitStatus {
 	if err := vetFlags(i); err != nil {
 		return subcommands.ExitUsageError
 	}
 
-	if err := i.installUpdates(); err != nil {
+	if err := i.installUpdates(ctx); err != nil {
 		fmt.Printf("Failed to install updates: %v", err)
 		deck.ErrorfA("Failed to install updates: %v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
 		return subcommands.ExitFailure
@@ -165,6 +167,34 @@ func downloadCollection(s *session.UpdateSession, c *updatecollection.Collection
 	return d.ResultCode()
 }
 
+// fetchDetailedUpdateError queries the Windows Event Log for recent update installation
+// failures matching the given title and returns any specific error code found in
+// the event message and true, or empty string and false if not found or on error.
+func fetchDetailedUpdateError(ctx context.Context, title string) (string, bool) {
+	// Query for event ID 20 from Microsoft-Windows-WindowsUpdateClient in the System log
+	// within the last 5 minutes. Filter messages that contain the update title.
+	// Sort by newest first, take the first result, and extract the first
+	// hexadecimal code found in the message, if any.
+	psTitle := "'" + strings.ReplaceAll(title, "'", "''") + "'"
+	psCmd := fmt.Sprintf(`Get-WinEvent -FilterHashtable @{LogName='System';ProviderName='Microsoft-Windows-WindowsUpdateClient';Id=20;StartTime=(Get-Date).AddMinutes(-5)} -ErrorAction SilentlyContinue |Where-Object {$_.Message -match [regex]::Escape(%s)} |Sort-Object TimeCreated -Descending |Select-Object -First 1 |ForEach-Object { if($_.Message -match '(0x[0-9a-fA-F]+)'){ $matches[1] } }`, psTitle)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, "-NoProfile", "-Command", psCmd)
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		deck.WarningfA("Failed to execute PowerShell to get detailed update error for %q: %v, stderr: %q", title, err, stderr.String()).Go()
+		return "", false
+	}
+	code := strings.TrimSpace(out.String())
+	if code == "" {
+		return "", false
+	}
+	return code, true
+}
+
 func installCollection(s *session.UpdateSession, c *updatecollection.Collection, ipu bool) (*installRsp, error) {
 	inst, err := install.NewInstaller(s, c)
 	if err != nil {
@@ -204,7 +234,7 @@ func installCollection(s *session.UpdateSession, c *updatecollection.Collection,
 	}, err
 }
 
-func (i *installCmd) installUpdates() error {
+func (i *installCmd) installUpdates(ctx context.Context) error {
 	// If monthly patches are disabled, and no specific update type was requested, do nothing.
 	if config.InstallMonthlyPatches == 0 && !i.all && !i.drivers && !i.virusDef && i.kbs == "" {
 		deck.InfoA("InstallMonthlyPatches is disabled, skipping default update installation.").With(eventID(cablib.EvtMisc)).Go()
@@ -410,6 +440,9 @@ outerLoop:
 			deck.InfofA("Successfully installed update:\n%s\nHResult Code: %s", u.Title, rsp.hResult).With(eventID(cablib.EvtInstall)).Go()
 		} else {
 			deck.ErrorfA("Failed to install update:\n%s\nReturnCode: %d\nHResult Code: %s", u.Title, rsp.resultCode, rsp.hResult).With(eventID(cablib.EvtErrInstallFailure)).Go()
+			if code, ok := fetchDetailedUpdateError(ctx, u.Title); ok {
+				deck.WarningfA("Detailed error for update %q from Windows Update Client log: %s", u.Title, code).Go()
+			}
 			c.Close()
 			continue
 		}
