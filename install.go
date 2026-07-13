@@ -302,6 +302,7 @@ func (i *installCmd) installUpdates(ctx context.Context) error {
 
 	installMsgPopped := i.virusDef
 	installingMinOneUpdate := false
+	anyRebootRequired := false
 
 	kbs := NewKBSet(i.kbs)
 	if err := initDriverExclusion(); err != nil {
@@ -450,6 +451,7 @@ outerLoop:
 		deck.InfofA("Install of KB %s; Reboot Required: %t", u.KBArticleIDs, rsp.rebootRequired).With(eventID(cablib.EvtRebootRequired)).Go()
 
 		if rsp.rebootRequired && !u.InCategories([]string{"Definition Updates"}) {
+			anyRebootRequired = true
 			deck.InfofA("Adding KB %s to reboot list.", u.KBArticleIDs).With(eventID(cablib.EvtRebootRequired)).Go()
 			rebootList = append(rebootList, u.KBArticleIDs...)
 		}
@@ -475,9 +477,11 @@ outerLoop:
 		}
 	}
 
-	if len(rebootList) > 0 {
-		if err := cablib.AddRebootUpdates(rebootList); err != nil {
-			deck.ErrorfA("Failed to write updates requiring reboot to registry: %v", err).With(eventID(cablib.EvtRebootRequired)).Go()
+	if anyRebootRequired || len(rebootList) > 0 {
+		if len(rebootList) > 0 {
+			if err := cablib.AddRebootUpdates(rebootList); err != nil {
+				deck.ErrorfA("Failed to write updates requiring reboot to registry: %v", err).With(eventID(cablib.EvtRebootRequired)).Go()
+			}
 		}
 
 		// Use active hours if enabled and available, otherwise use the standard reboot delay.
