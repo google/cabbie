@@ -38,17 +38,29 @@ func New() (*Collection, error) {
 
 // Count gets the number of updates in an UpdateCollection.
 func (uc *Collection) Count() (int, error) {
+	if uc.IUpdateCollection == nil {
+		return 0, fmt.Errorf("IUpdateCollection is nil")
+	}
 	count, err := oleutil.GetProperty(uc.IUpdateCollection, "Count")
+	if count != nil {
+		defer count.Clear()
+	}
 	if err != nil {
 		return 0, fmt.Errorf("error getting update collection count, %v", err)
 	}
-	defer count.Clear()
 	return int(count.Val), nil
 }
 
 // Add adds an update item to the collection.
 func (uc *Collection) Add(item *ole.IDispatch) error {
-	if _, err := oleutil.CallMethod(uc.IUpdateCollection, "Add", item); err != nil {
+	if uc.IUpdateCollection == nil {
+		return fmt.Errorf("IUpdateCollection is nil")
+	}
+	r, err := oleutil.CallMethod(uc.IUpdateCollection, "Add", item)
+	if r != nil {
+		defer r.Clear()
+	}
+	if err != nil {
 		return fmt.Errorf("error adding to collection, %v", err)
 	}
 	return nil
@@ -56,7 +68,14 @@ func (uc *Collection) Add(item *ole.IDispatch) error {
 
 // Clear removes all the update items from the collection.
 func (uc *Collection) Clear() error {
-	if _, err := oleutil.CallMethod(uc.IUpdateCollection, "Clear"); err != nil {
+	if uc.IUpdateCollection == nil {
+		return fmt.Errorf("IUpdateCollection is nil")
+	}
+	r, err := oleutil.CallMethod(uc.IUpdateCollection, "Clear")
+	if r != nil {
+		defer r.Clear()
+	}
+	if err != nil {
 		return fmt.Errorf("error clearing collection, %v", err)
 	}
 	return nil
@@ -74,15 +93,20 @@ func (uc *Collection) Refresh() error {
 	for i := 0; i < count; i++ {
 		item, err := oleutil.GetProperty(uc.IUpdateCollection, "item", i)
 		if err != nil {
+			uc.closeItems()
 			return err
 		}
 		itemd := item.ToIDispatch()
 
 		up, errors := updates.New(itemd)
 		if len(errors) > 0 {
+			itemd.Release()
+			_ = item.Clear()
+			uc.closeItems()
 			return fmt.Errorf("errors in update enumeration: %v", errors)
 		}
 		uc.Updates[i] = up
+		_ = item.Clear()
 	}
 	return nil
 }
@@ -91,19 +115,30 @@ func (uc *Collection) Refresh() error {
 func (uc *Collection) Titles() []string {
 	var t []string
 	for _, u := range uc.Updates {
-		t = append(t, u.Title)
+		if u != nil {
+			t = append(t, u.Title)
+		}
 	}
 	return t
 }
 
 // Close turns down any open update sessions.
 func (uc *Collection) Close() {
-	uc.IUpdateCollection.Release()
+	if uc == nil {
+		return
+	}
+	if uc.IUpdateCollection != nil {
+		uc.IUpdateCollection.Release()
+		uc.IUpdateCollection = nil
+	}
 	uc.closeItems()
 }
 
 func (uc *Collection) closeItems() {
 	for i := 0; i < len(uc.Updates); i++ {
-		uc.Updates[i].Item.Release()
+		if uc.Updates[i] != nil && uc.Updates[i].Item != nil {
+			uc.Updates[i].Item.Release()
+			uc.Updates[i].Item = nil
+		}
 	}
 }

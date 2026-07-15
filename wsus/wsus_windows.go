@@ -18,8 +18,11 @@
 package wsus
 
 import (
+	"golang.org/x/net/context"
 	"fmt"
 	"net/http"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/cabbie/cablib"
@@ -28,29 +31,48 @@ import (
 )
 
 var (
-	wlog *eventlog.Log
+	wlog   *eventlog.Log
+	wlogMu sync.Mutex
 )
 
-func responseTime(name string) time.Duration {
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://%s", name), nil)
+func setLog(l *eventlog.Log) {
+	wlogMu.Lock()
+	defer wlogMu.Unlock()
+	wlog = l
+}
+
+func logWarning(eid uint32, msg string) {
+	wlogMu.Lock()
+	l := wlog
+	wlogMu.Unlock()
+	if l != nil {
+		l.Warning(eid, msg)
+	}
+}
+
+func responseTime(ctx context.Context, name string) (time.Duration, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("https://%s", name), nil)
 	if err != nil {
-		wlog.Warning(3, fmt.Sprintf("Failed to create new http request: %v", err))
-		return 0
+		logWarning(3, fmt.Sprintf("Failed to create new http request: %v", err))
+		return 0, err
 	}
 
 	start := time.Now()
 	resp, err := http.DefaultTransport.RoundTrip(req)
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
 	if err != nil {
-		wlog.Warning(3, fmt.Sprintf("Failed to send GET request to: %v", err))
-		return 0
+		logWarning(3, fmt.Sprintf("Failed to send GET request to: %v", err))
+		return 0, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		wlog.Warning(3, fmt.Sprintf("Non-200 status code returned(%d)", resp.StatusCode))
-		return 0
+		logWarning(3, fmt.Sprintf("Non-200 status code returned(%d)", resp.StatusCode))
+		return 0, fmt.Errorf("non-200 status code: %d", resp.StatusCode)
 	}
 
-	return time.Since(start)
+	return time.Since(start), nil
 }
 
 // Init will initialize the local update client with the desired WSUS config.
@@ -63,12 +85,14 @@ func Init(servers []string) (*WSUS, error) {
 		return &w, w.Clear()
 	}
 
-	wlog, err = eventlog.Open("Cabbie WSUS")
+	el, err := eventlog.Open("Cabbie WSUS")
 	if err != nil {
 		return &w, err
 	}
+	setLog(el)
 
-	w.order(servers)
+	ctx := context.Background()
+	w.order(ctx, servers)
 
 	if len(w.Servers) == 0 {
 		w.ServerSelection = WindowsUpdate
@@ -83,22 +107,30 @@ func Init(servers []string) (*WSUS, error) {
 	return &w, nil
 }
 
-// order returns a list of WSUS servers from fastest to slowest.
-func (w *WSUS) order(servers []string) {
+type serverLatency struct {
+	name    string
+	latency time.Duration
+}
 
-	s := make(map[int]string, len(servers))
+// order returns a list of WSUS servers from fastest to slowest.
+func (w *WSUS) order(ctx context.Context, servers []string) {
+	w.Servers = nil
+	var validServers []serverLatency
 	for _, n := range servers {
-		t := responseTime(n)
-		if t == 0 {
-			wlog.Warning(2, fmt.Sprintf("Skipping WSUS server %s as it appears to be unreachable", n))
+		t, err := responseTime(ctx, n)
+		if err != nil {
+			logWarning(2, fmt.Sprintf("Skipping WSUS server %s as it appears to be unreachable: %v", n, err))
 			continue
 		}
-		s[int(t)] = n
+		validServers = append(validServers, serverLatency{name: n, latency: t})
 	}
-	k := sortedKeys(s)
 
-	for _, key := range k {
-		w.Servers = append(w.Servers, s[key])
+	sort.Slice(validServers, func(i, j int) bool {
+		return validServers[i].latency < validServers[j].latency
+	})
+
+	for _, s := range validServers {
+		w.Servers = append(w.Servers, s.name)
 	}
 }
 
@@ -116,7 +148,7 @@ func (w *WSUS) Set(index int) error {
 	}
 	defer k.Close()
 
-	if index > (len(w.Servers) - 1) {
+	if index < 0 || index > (len(w.Servers)-1) {
 		return fmt.Errorf("requested index (%d) is out of selectable server range (%d)", index, (len(w.Servers) - 1))
 	}
 	name := w.Servers[index]
@@ -155,11 +187,11 @@ func (w *WSUS) Clear() error {
 
 	err = k.DeleteValue("WUServer")
 	if err != nil && err != registry.ErrNotExist {
-		wlog.Warning(4, fmt.Sprintf("Failed to delete WUServer registry value: %v", err))
+		logWarning(4, fmt.Sprintf("Failed to delete WUServer registry value: %v", err))
 	}
 	err = k.DeleteValue("WUStatusServer")
 	if err != nil && err != registry.ErrNotExist {
-		wlog.Warning(4, fmt.Sprintf("Failed to delete WUStatusServer registry value: %v", err))
+		logWarning(4, fmt.Sprintf("Failed to delete WUStatusServer registry value: %v", err))
 	}
 
 	auk, err := registry.OpenKey(k, "AU", registry.ALL_ACCESS)

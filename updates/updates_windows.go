@@ -56,13 +56,18 @@ func New(item *ole.IDispatch) (*Update, []error) {
 			// Check if IUpdate object also implements any IWindowsDriverUpdate property.
 			// If not, skip attempting to extract IWindowsDriverUpdate properties.
 			// See https://docs.microsoft.com/en-us/windows/win32/api/wuapi/nn-wuapi-iwindowsdriverupdate
-			if _, err := u.Item.QueryInterface(cablib.IIDIWindowsDriverUpdate); err != nil {
+			if q, err := u.Item.QueryInterface(cablib.IIDIWindowsDriverUpdate); err != nil {
 				continue
+			} else {
+				q.Release()
 			}
 		}
 
 		v, err := oleutil.GetProperty(u.Item, p)
 		if err != nil {
+			if v != nil {
+				_ = v.Clear()
+			}
 			if p == "IsDownloaded" {
 				// Certain properties are not available on all updates.
 				// https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nn-wuapi-iupdate#remarks
@@ -98,6 +103,7 @@ func New(item *ole.IDispatch) (*Update, []error) {
 				errs = append(errs, err)
 			}
 		}
+		_ = v.Clear()
 	}
 
 	if err := u.fillStruct(data); err != nil {
@@ -109,9 +115,19 @@ func New(item *ole.IDispatch) (*Update, []error) {
 
 // AcceptEula accepts the Microsoft Software License Terms that are associated with Windows Update.
 func (up *Update) AcceptEula() error {
+	if up.Item == nil {
+		return fmt.Errorf("Update.Item is nil")
+	}
 	r, err := oleutil.CallMethod(up.Item, "AcceptEula")
+	if r != nil {
+		defer r.Clear()
+	}
 	if err != nil {
-		return fmt.Errorf("unable to accept Eula: [%s] [%v]", errors.UpdateError(r.Val), err)
+		var hres string
+		if r != nil {
+			hres = fmt.Sprintf("%s", errors.UpdateError(r.Val))
+		}
+		return fmt.Errorf("unable to accept Eula: [%s] [%v]", hres, err)
 	}
 	up.EulaAccepted = true
 	return nil
@@ -119,9 +135,19 @@ func (up *Update) AcceptEula() error {
 
 // Hide sets a Boolean value that hides the update from future search results.
 func (up *Update) Hide() error {
+	if up.Item == nil {
+		return fmt.Errorf("Update.Item is nil")
+	}
 	r, err := oleutil.PutProperty(up.Item, "IsHidden", true)
+	if r != nil {
+		defer r.Clear()
+	}
 	if err != nil {
-		return fmt.Errorf("unable to hide update: [%s] [%v]", errors.UpdateError(r.Val), err)
+		var hres string
+		if r != nil {
+			hres = fmt.Sprintf("%s", errors.UpdateError(r.Val))
+		}
+		return fmt.Errorf("unable to hide update: [%s] [%v]", hres, err)
 	}
 	up.IsHidden = true
 	return nil
@@ -129,9 +155,19 @@ func (up *Update) Hide() error {
 
 // UnHide sets a Boolean value that makes the update available in future search results.
 func (up *Update) UnHide() error {
+	if up.Item == nil {
+		return fmt.Errorf("Update.Item is nil")
+	}
 	r, err := oleutil.PutProperty(up.Item, "IsHidden", false)
+	if r != nil {
+		defer r.Clear()
+	}
 	if err != nil {
-		return fmt.Errorf("failed to unhide update: [%s] [%v]", errors.UpdateError(r.Val), err)
+		var hres string
+		if r != nil {
+			hres = fmt.Sprintf("%s", errors.UpdateError(r.Val))
+		}
+		return fmt.Errorf("failed to unhide update: [%s] [%v]", hres, err)
 	}
 	up.IsHidden = false
 	return nil
@@ -142,7 +178,14 @@ func toString(v *ole.VARIANT) string {
 }
 
 func toBool(v *ole.VARIANT) bool {
-	return v.Value().(bool)
+	if v == nil || v.Value() == nil {
+		return false
+	}
+	val, ok := v.Value().(bool)
+	if !ok {
+		return false
+	}
+	return val
 }
 
 func toInt(v *ole.VARIANT) int {
@@ -174,7 +217,9 @@ func forEachIn(v *ole.VARIANT, do func(item *ole.VARIANT) error) error {
 			return fmt.Errorf("get item %d: %w", i, err)
 		}
 
-		if err := do(item); err != nil {
+		err = do(item)
+		_ = item.Clear()
+		if err != nil {
 			return fmt.Errorf("do item %d: %w", i, err)
 		}
 	}
@@ -196,7 +241,6 @@ func toCategories(v *ole.VARIANT) ([]Category, error) {
 	var r []Category
 	if err := forEachIn(v, func(item *ole.VARIANT) error {
 		itemd := item.ToIDispatch()
-		defer itemd.Release()
 
 		n, err := oleutil.GetProperty(itemd, "Name")
 		if err != nil {

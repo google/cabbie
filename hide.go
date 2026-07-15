@@ -18,12 +18,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"flag"
 	"github.com/google/cabbie/cablib"
 	"github.com/google/cabbie/search"
-	"github.com/google/cabbie/session"
-	"github.com/google/cabbie/updatecollection"
+	"github.com/google/cabbie/updates"
 	"github.com/google/deck"
 	"github.com/google/subcommands"
 )
@@ -67,88 +67,62 @@ func (c hideCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subco
 	return subcommands.ExitSuccess
 }
 
-// TODO(cjgenevi): Turn into shared function that can be used by multiple actions
-func findUpdates(criteria string) (*updatecollection.Collection, error) {
-	// Start Windows update session
-	s, err := session.New()
+func modifyUpdatesVisibility(criteria string, evtID uint32, errEvtID uint32, actionMsg string, matchFn func(u *updates.Update) bool, actionFn func(u *updates.Update) error) error {
+	uc, _, err := search.FindUpdates(nil, criteria, config.WSUSServers, config.EnableThirdParty)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer s.Close()
+	defer uc.Close()
 
-	q, err := search.NewSearcher(s, criteria, config.WSUSServers, config.EnableThirdParty)
-	if err != nil {
-		return nil, err
+	deck.InfofA("Found %d matching updates.", len(uc.Updates)).With(eventID(evtID)).Go()
+
+	for _, u := range uc.Updates {
+		if matchFn(u) {
+			deck.InfofA("%s update:\n%s", actionMsg, u.Title).With(eventID(evtID)).Go()
+			if err := actionFn(u); err != nil {
+				deck.ErrorfA("Failed to %s update %s:\n %s", strings.ToLower(actionMsg), u.Title, err).With(eventID(errEvtID)).Go()
+			}
+		}
 	}
-	defer q.Close()
 
-	return q.QueryUpdates()
+	return nil
 }
 
 func unhide(kbs KBSet) error {
-	// Find hidden updates.
-	uc, err := findUpdates("IsHidden=1")
-	if err != nil {
-		return err
-	}
-	defer uc.Close()
-
-	deck.InfofA("Found %d matching updates.", len(uc.Updates)).With(eventID(cablib.EvtUnhide)).Go()
-
-	for _, u := range uc.Updates {
-		if kbs.Search(u.KBArticleIDs) {
-			deck.InfofA("Unhiding update:\n%s", u.Title).With(eventID(cablib.EvtUnhide)).Go()
-			if err := u.UnHide(); err != nil {
-				deck.ErrorfA("Failed to unhide update %s:\n %s", u.Title, err).With(eventID(cablib.EvtErrUnhide)).Go()
-			}
-		}
-	}
-
-	return nil
+	return modifyUpdatesVisibility(
+		"IsHidden=1",
+		cablib.EvtUnhide,
+		cablib.EvtErrUnhide,
+		"Unhiding",
+		func(u *updates.Update) bool { return kbs.Search(u.KBArticleIDs) },
+		func(u *updates.Update) error { return u.UnHide() },
+	)
 }
 
+const nonHiddenCriteria = "IsHidden=0 and IsInstalled=0 or IsHidden=0 and IsInstalled=1"
+
 func hide(kbs KBSet) error {
-	// Find non-hidden updates that are installed or not installed.
-	uc, err := findUpdates("IsHidden=0 and IsInstalled=0 or IsHidden=0 and IsInstalled=1")
-	if err != nil {
-		return err
-	}
-	defer uc.Close()
-
-	deck.InfofA("Found %d matching updates.", len(uc.Updates)).With(eventID(cablib.EvtHide)).Go()
-
-	for _, u := range uc.Updates {
-		if kbs.Search(u.KBArticleIDs) {
-			deck.InfofA("Hiding update:\n%s", u.Title).With(eventID(cablib.EvtHide)).Go()
-			if err := u.Hide(); err != nil {
-				deck.ErrorfA("Failed to hide update %s:\n %s", u.Title, err).With(eventID(cablib.EvtErrHide)).Go()
-			}
-		}
-	}
-
-	return nil
+	return modifyUpdatesVisibility(
+		nonHiddenCriteria,
+		cablib.EvtHide,
+		cablib.EvtErrHide,
+		"Hiding",
+		func(u *updates.Update) bool { return kbs.Search(u.KBArticleIDs) },
+		func(u *updates.Update) error { return u.Hide() },
+	)
 }
 
 func hideByUpdateID(uuids []string) error {
-	// Find non-hidden updates that are installed or not installed.
-	uc, err := findUpdates("IsHidden=0 and IsInstalled=0 or IsHidden=0 and IsInstalled=1")
-	if err != nil {
-		return err
+	uuidSet := make(map[string]bool, len(uuids))
+	for _, id := range uuids {
+		uuidSet[id] = true
 	}
-	defer uc.Close()
-
-	deck.InfofA("Found %d matching updates.", len(uc.Updates)).With(eventID(cablib.EvtHide)).Go()
-
-	for _, u := range uc.Updates {
-		for _, uuid := range uuids {
-			if uuid == u.Identity.UpdateID {
-				deck.InfofA("Hiding update by UpdateID:\n%s", u.Title).With(eventID(cablib.EvtHide)).Go()
-				if err := u.Hide(); err != nil {
-					deck.ErrorfA("Failed to hide update %s:\n %s", u.Title, err).With(eventID(cablib.EvtErrHide)).Go()
-				}
-			}
-		}
-	}
-
-	return nil
+	return modifyUpdatesVisibility(
+		nonHiddenCriteria,
+		cablib.EvtHide,
+		cablib.EvtErrHide,
+		"Hiding",
+		func(u *updates.Update) bool { return uuidSet[u.Identity.UpdateID] },
+		func(u *updates.Update) error { return u.Hide() },
+	)
 }

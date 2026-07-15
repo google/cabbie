@@ -112,21 +112,22 @@ func TestSetWsusIfNeeded(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Use test registry path
-			origPath := cablib.RegPath
-			cablib.RegPath = testRegPath
+			origPath := cablib.RegPath()
+			cablib.SetRegPath(testRegPath)
 			// Clean registry before and after test
 			registry.DeleteKey(registry.LOCAL_MACHINE, testRegPath)
 			defer func() {
-				cablib.RegPath = origPath
+				cablib.SetRegPath(origPath)
 				registry.DeleteKey(registry.LOCAL_MACHINE, testRegPath)
 			}()
 
-			netDialTimeout = func(network, address string, timeout time.Duration) (net.Conn, error) {
+			SetNetDialTimeout(func(network, address string, timeout time.Duration) (net.Conn, error) {
 				if tt.dialErr != nil {
 					return nil, tt.dialErr
 				}
 				return &mockConn{}, nil
-			}
+			})
+			defer SetNetDialTimeout(net.DialTimeout)
 			err := setWsusIfNeeded(tt.targets, tt.force)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("setWsusIfNeeded() error = %v, wantErr %v", err, tt.wantErr)

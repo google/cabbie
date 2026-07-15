@@ -18,7 +18,9 @@
 package cablib
 
 import (
+	"golang.org/x/net/context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/cabbie/notification"
@@ -29,17 +31,46 @@ import (
 )
 
 var (
-	rebootRequired = RebootRequired
+	rebootRequiredMu   sync.RWMutex
+	rebootRequiredFunc = RebootRequired
 
 	// IIDIWindowsDriverUpdate is the GUID for the IWindowsDriverUpdate COM interface.
 	// See: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-uamg/e839e7e0-1795-451b-94ef-abacd6cbecac
 	IIDIWindowsDriverUpdate = ole.NewGUID("B383CD1A-5CE9-4504-9F63-764B1236F191")
-	sleepWaitTime           = 30 * time.Minute
+
+	sleepWaitTimeMu sync.RWMutex
+	sleepWaitTime   = 30 * time.Minute
 )
+
+// SetRebootRequiredFunc sets a custom function to determine if reboot is required (for testing).
+func SetRebootRequiredFunc(f func() (bool, error)) {
+	rebootRequiredMu.Lock()
+	defer rebootRequiredMu.Unlock()
+	rebootRequiredFunc = f
+}
+
+// SetSleepWaitTime sets the popup sleep duration (for testing).
+func SetSleepWaitTime(d time.Duration) {
+	sleepWaitTimeMu.Lock()
+	defer sleepWaitTimeMu.Unlock()
+	sleepWaitTime = d
+}
+
+func getSleepWaitTime() time.Duration {
+	sleepWaitTimeMu.RLock()
+	defer sleepWaitTimeMu.RUnlock()
+	return sleepWaitTime
+}
+
+func getRebootRequired() (bool, error) {
+	rebootRequiredMu.RLock()
+	defer rebootRequiredMu.RUnlock()
+	return rebootRequiredFunc()
+}
 
 // AddRebootUpdates adds a reboot-required update list of KBs to the registry.
 func AddRebootUpdates(kbs []string) error {
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.SET_VALUE)
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath(), registry.SET_VALUE)
 	if err != nil {
 		return err
 	}
@@ -51,7 +82,7 @@ func AddRebootUpdates(kbs []string) error {
 // GetRebootUpdates retrieves the reboot-required update list of KBs from the registry.
 func GetRebootUpdates() ([]string, error) {
 	var kbs []string
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.READ)
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath(), registry.READ)
 	if err != nil {
 		return kbs, err
 	}
@@ -67,7 +98,7 @@ func GetRebootUpdates() ([]string, error) {
 
 // cleanRebootUpdatesValue clears the reboot-required update list from the registry.
 func cleanRebootUpdatesValue() error {
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.SET_VALUE)
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath(), registry.SET_VALUE)
 	if err != nil {
 		return err
 	}
@@ -101,7 +132,7 @@ func cleanInstallAtShutdownValue() error {
 
 // SetRebootTime creates the reboot time key.
 func SetRebootTime(t time.Time) error {
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.SET_VALUE)
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath(), registry.SET_VALUE)
 	if err != nil {
 		return err
 	}
@@ -117,7 +148,7 @@ func SetRebootTime(t time.Time) error {
 // RebootTime gets the value of "rebootValue" from the registry.
 func RebootTime() (time.Time, error) {
 	var t time.Time
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.ALL_ACCESS)
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath(), registry.ALL_ACCESS)
 	if err != nil {
 		return t, err
 	}
@@ -132,7 +163,7 @@ func RebootTime() (time.Time, error) {
 	}
 
 	// Remove timer if no longer pending a reboot.
-	rbr, err := rebootRequired()
+	rbr, err := getRebootRequired()
 	if err != nil {
 		return t, err
 	}
@@ -149,7 +180,7 @@ func RebootTime() (time.Time, error) {
 
 // ClearRebootTime deletes the reboot time key.
 func ClearRebootTime() error {
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.SET_VALUE)
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath(), registry.SET_VALUE)
 	if err != nil {
 		return err
 	}
@@ -158,13 +189,24 @@ func ClearRebootTime() error {
 	return k.DeleteValue(rebootValue)
 }
 
-// SystemReboot initiates a restart when the set reboot time has passed. This should be called within a goroutine
-func SystemReboot(t time.Time) error {
-	time.Sleep(time.Until(t))
+// SystemReboot initiates a restart when the set reboot time has passed.
+func SystemReboot(ctx context.Context, t time.Time) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-time.After(time.Until(t)):
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 
-	notification.RebootPopup(30).Push()
+	notification.RebootPopup(30).Push(ctx)
 
-	time.Sleep(sleepWaitTime)
+	select {
+	case <-time.After(getSleepWaitTime()):
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 
 	if err := ClearRebootTime(); err != nil {
 		return fmt.Errorf("failed to clean up registry value %q: %v", rebootValue, err)
@@ -180,10 +222,15 @@ func SystemReboot(t time.Time) error {
 // Count gets the count property of an IDispatch object.
 func Count(id *ole.IDispatch) (int, error) {
 	count, err := oleutil.GetProperty(id, "Count")
+	if count != nil {
+		defer count.Clear()
+	}
 	if err != nil {
 		return 0, fmt.Errorf("error getting update count, %v", err)
 	}
-	defer count.Clear()
+	if count == nil {
+		return 0, fmt.Errorf("error getting update count: nil variant returned")
+	}
 	return int(count.Val), nil
 }
 
@@ -212,12 +259,45 @@ func RebootRequired() (bool, error) {
 	defer sysinfo.Release()
 
 	r, err := oleutil.GetProperty(sysinfo, "RebootRequired")
+	if r != nil {
+		defer r.Clear()
+	}
 	if err != nil {
 		return false, fmt.Errorf("failed to get RebootRequired property: %v", err)
 	}
-	defer r.Clear()
+	if r == nil {
+		return false, fmt.Errorf("failed to get RebootRequired property: nil variant returned")
+	}
 
 	return r.Value().(bool), nil
+}
+
+func getUpdateTitleAt(collection *ole.IDispatch, index int) (string, error) {
+	item, err := oleutil.GetProperty(collection, "item", index)
+	if item != nil {
+		defer item.Clear()
+	}
+	if err != nil {
+		return "", err
+	}
+	if item == nil {
+		return "", fmt.Errorf("nil item variant returned for index %d", index)
+	}
+
+	itemd := item.ToIDispatch()
+
+	title, err := oleutil.GetProperty(itemd, "Title")
+	if title != nil {
+		defer title.Clear()
+	}
+	if err != nil {
+		return "", err
+	}
+	if title == nil {
+		return "", fmt.Errorf("nil title variant returned for index %d", index)
+	}
+
+	return title.ToString(), nil
 }
 
 // GetUpdateTitles loops through an update collection and returns a list of titles.
@@ -226,24 +306,12 @@ func GetUpdateTitles(collection *ole.IDispatch, count int) ([]string, []error) {
 	var u []string
 
 	for i := 0; i < count; i++ {
-		// Get update at position i
-		item, err := oleutil.GetProperty(collection, "item", i)
+		title, err := getUpdateTitleAt(collection, i)
 		if err != nil {
 			errors = append(errors, err)
 			continue
 		}
-		itemd := item.ToIDispatch()
-
-		// Get selected updates title
-		title, err := oleutil.GetProperty(itemd, "Title")
-		if err != nil {
-			errors = append(errors, err)
-			continue
-		}
-
-		u = append(u, title.ToString())
-		itemd.Release()
-		title.Clear()
+		u = append(u, title)
 	}
 
 	if len(errors) > 0 {
@@ -251,3 +319,4 @@ func GetUpdateTitles(collection *ole.IDispatch, count int) ([]string, []error) {
 	}
 	return u, nil
 }
+

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"sync"
 	"time"
 )
 
@@ -48,10 +49,40 @@ const (
 )
 
 var (
-	now = time.Now
-	// RegPath is the registry path to the cabbie settings.
-	RegPath = `SOFTWARE\Google\Cabbie\`
+	regPathMu sync.RWMutex
+	regPath   = `SOFTWARE\Google\Cabbie\`
+
+	nowMu   sync.RWMutex
+	nowFunc = time.Now
 )
+
+// RegPath returns the registry path to the cabbie settings.
+func RegPath() string {
+	regPathMu.RLock()
+	defer regPathMu.RUnlock()
+	return regPath
+}
+
+// SetRegPath sets the registry path to the cabbie settings in a thread-safe manner.
+func SetRegPath(path string) {
+	regPathMu.Lock()
+	defer regPathMu.Unlock()
+	regPath = path
+}
+
+// Now returns current time, using custom provider if set.
+func Now() time.Time {
+	nowMu.RLock()
+	defer nowMu.RUnlock()
+	return nowFunc()
+}
+
+// SetNowFunc sets custom time provider function for testing.
+func SetNowFunc(f func() time.Time) {
+	nowMu.Lock()
+	defer nowMu.Unlock()
+	nowFunc = f
+}
 
 // StringInSlice checks if a slice contains a string.
 func StringInSlice(e string, s []string) bool {
@@ -120,12 +151,12 @@ func PathExists(path string) (bool, error) {
 }
 
 // SliceContains evaluates if a given value is in the passed slice.
-func SliceContains(slice interface{}, v interface{}) bool {
-	list := reflect.ValueOf(slice)
-	for i := 0; i < list.Len(); i++ {
-		if list.Index(i).Interface() == v {
+func SliceContains[T comparable](slice []T, v T) bool {
+	for _, a := range slice {
+		if a == v {
 			return true
 		}
 	}
 	return false
 }
+

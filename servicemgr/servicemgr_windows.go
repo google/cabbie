@@ -18,6 +18,8 @@
 package servicemgr
 
 import (
+	"fmt"
+
 	"github.com/google/cabbie/cablib"
 	"github.com/go-ole/go-ole/oleutil"
 )
@@ -35,24 +37,37 @@ func InitMgrService() (*ServiceManager, error) {
 // cabinet file (.cab).
 // More info can be found at https://docs.microsoft.com/en-us/windows/win32/api/wuapi/nf-wuapi-iupdateservicemanager2-addservice2
 func (m *ServiceManager) AddService(s ServiceID) error {
-	_, err := oleutil.CallMethod(m.ServiceManager, "AddService2", string(s), 7, "")
+	if m.ServiceManager == nil {
+		return fmt.Errorf("ServiceManager is nil")
+	}
+	r, err := oleutil.CallMethod(m.ServiceManager, "AddService2", string(s), 7, "")
+	if r != nil {
+		defer r.Clear()
+	}
 	return err
 }
 
 // QueryServiceRegistration verifies if a serviceID has been registered with Windows Update Agent.
 func (m *ServiceManager) QueryServiceRegistration(s ServiceID) (bool, error) {
+	if m.ServiceManager == nil {
+		return false, fmt.Errorf("ServiceManager is nil")
+	}
 	sr, err := oleutil.CallMethod(m.ServiceManager, "QueryServiceRegistration", string(s))
+	if sr != nil {
+		defer sr.Clear()
+	}
 	if err != nil {
 		return false, err
 	}
 	srd := sr.ToIDispatch()
-	defer srd.Release()
 
 	state, err := oleutil.GetProperty(srd, "RegistrationState")
+	if state != nil {
+		defer state.Clear()
+	}
 	if err != nil {
 		return false, err
 	}
-	defer state.Clear()
 
 	// Possible state values:
 	// 1 = The service is not registered.
@@ -67,11 +82,23 @@ func (m *ServiceManager) QueryServiceRegistration(s ServiceID) (bool, error) {
 
 // RemoveService removes a service registration from Windows Update Agent (WUA).
 func (m *ServiceManager) RemoveService(s ServiceID) error {
-	_, err := oleutil.CallMethod(m.ServiceManager, "RemoveService", string(s))
+	if m.ServiceManager == nil {
+		return fmt.Errorf("ServiceManager is nil")
+	}
+	r, err := oleutil.CallMethod(m.ServiceManager, "RemoveService", string(s))
+	if r != nil {
+		defer r.Clear()
+	}
 	return err
 }
 
 // Close turns down any open service manager sessions.
 func (m *ServiceManager) Close() {
-	m.ServiceManager.Release()
+	if m == nil {
+		return
+	}
+	if m.ServiceManager != nil {
+		m.ServiceManager.Release()
+		m.ServiceManager = nil
+	}
 }

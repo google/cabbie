@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"flag"
@@ -33,8 +34,22 @@ import (
 
 var (
 	// Test Stubs
-	netDialTimeout = net.DialTimeout
+	netDialTimeoutMu sync.RWMutex
+	netDialTimeout   = net.DialTimeout
 )
+
+// SetNetDialTimeout sets the net.DialTimeout function stub (for testing).
+func SetNetDialTimeout(f func(network, address string, timeout time.Duration) (net.Conn, error)) {
+	netDialTimeoutMu.Lock()
+	defer netDialTimeoutMu.Unlock()
+	netDialTimeout = f
+}
+
+func getNetDialTimeout() func(network, address string, timeout time.Duration) (net.Conn, error) {
+	netDialTimeoutMu.RLock()
+	defer netDialTimeoutMu.RUnlock()
+	return netDialTimeout
+}
 
 // wsusCmd defines the wsus subcommand.
 type wsusCmd struct {
@@ -56,7 +71,7 @@ const wuHost = "windowsupdate.microsoft.com"
 
 func setWsusIfNeeded(targets string, force bool) error {
 	// If we're already connected to WU, we don't need to do anything.
-	conn, err := netDialTimeout("tcp", net.JoinHostPort(wuHost, "80"), 3*time.Second)
+	conn, err := getNetDialTimeout()("tcp", net.JoinHostPort(wuHost, "80"), 3*time.Second)
 	if err == nil && !force {
 		conn.Close()
 		return nil
@@ -72,9 +87,9 @@ func setWsusIfNeeded(targets string, force bool) error {
 		return fmt.Errorf("no valid WSUS servers provided in targets string %q", targets)
 	}
 	deck.Info("Writing WSUS servers to registry.")
-	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, cablib.RegPath, registry.SET_VALUE)
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, cablib.RegPath(), registry.SET_VALUE)
 	if err != nil {
-		return fmt.Errorf("registry.CreateKey(%s): %w", cablib.RegPath, err)
+		return fmt.Errorf("registry.CreateKey(%s): %w", cablib.RegPath(), err)
 	}
 	defer k.Close()
 	if err := k.SetStringsValue("WSUSServers", servers); err != nil {
@@ -83,7 +98,7 @@ func setWsusIfNeeded(targets string, force bool) error {
 
 	// If we wrote to registry, we should reload config so that wsus.Init gets new servers.
 	deck.Info("Reloading config to apply WSUS servers.")
-	if err := config.regLoad(cablib.RegPath); err != nil {
+	if err := config.regLoad(cablib.RegPath()); err != nil {
 		deck.ErrorfA("Failed to reload Cabbie config after setting WSUS servers:\n%v\nError:%v", config, err).With(eventID(cablib.EvtErrConfig)).Go()
 	}
 	return nil

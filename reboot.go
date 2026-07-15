@@ -50,69 +50,84 @@ func (c *rebootCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.check, "check", false, "Check if a reboot is pending, and display the time if present.")
 }
 
-func (c rebootCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subcommands.ExitStatus {
+func (c rebootCmd) handleClear() subcommands.ExitStatus {
 	eventID := eventlog.EventID
-	rc := subcommands.ExitSuccess
+	if err := notification.CleanNotifications(cablib.SvcName); err != nil {
+		deck.ErrorfA("Failed to clear reboot notification: %v", err).With(eventID(cablib.EvtErrNotifications)).Go()
+	}
+	if err := cablib.ClearRebootTime(); err != nil {
+		if errors.Is(err, registry.ErrNotExist) {
+			fmt.Printf("No Cabbie reboot time found to clear.")
+			return subcommands.ExitSuccess
+		}
+		fmt.Printf("Failed to clear reboot time: %v", err)
+		return subcommands.ExitFailure
+	}
+	msg := "Cabbie reboot time has been manually cleared."
+	deck.InfoA(msg).With(eventID(cablib.EvtRebootRequired)).Go()
+	fmt.Print(msg)
+	return subcommands.ExitSuccess
+}
+
+func (c rebootCmd) handleSetTime() subcommands.ExitStatus {
+	eventID := eventlog.EventID
+	rebootTime := time.Now().Add(time.Second * time.Duration(c.time))
+	if err := notification.NewRebootMessage(rebootTime).Push(context.Background()); err != nil {
+		deck.ErrorfA("Failed to create manually set reboot notification: %v", err).With(eventID(cablib.EvtErrNotifications)).Go()
+	}
+	if err := cablib.SetRebootTime(rebootTime); err != nil {
+		deck.ErrorfA("Failed to set reboot time: %v", err).With(eventID(cablib.EvtRebootRequired)).Go()
+		fmt.Printf("Failed to set reboot time: %v", err)
+		return subcommands.ExitFailure
+	}
+	msg := fmt.Sprintf("Cabbie reboot time has been manually set to %v", rebootTime)
+	deck.InfoA(msg).With(eventID(cablib.EvtRebootRequired)).Go()
+	fmt.Print(msg)
+	return subcommands.ExitSuccess
+}
+
+func (c rebootCmd) handleCheck() subcommands.ExitStatus {
+	eventID := eventlog.EventID
+	pending, err := cablib.RebootRequired()
+	if err != nil {
+		msg := fmt.Sprintf("Failed to get reboot pending status: %v", err)
+		deck.ErrorfA(msg).With(eventID(cablib.EvtMisc)).Go()
+		fmt.Println(msg)
+		return subcommands.ExitFailure
+	}
+	if !pending {
+		msg := "No reboot is pending."
+		deck.InfoA(msg).With(eventID(cablib.EvtMisc)).Go()
+		fmt.Println(msg)
+		return subcommands.ExitSuccess
+	}
+	rebootTime, err := cablib.RebootTime()
+	if err != nil {
+		msg := fmt.Sprintf("A reboot is pending, but failed to get reboot time: %v", err)
+		deck.ErrorfA(msg).With(eventID(cablib.EvtMisc)).Go()
+		fmt.Println(msg)
+		return subcommands.ExitFailure
+	}
+	msg := fmt.Sprintf("A reboot is pending at %s.\n", rebootTime.String())
+	deck.InfoA(msg).With(eventID(cablib.EvtMisc)).Go()
+	fmt.Print(msg)
+	return subcommands.ExitSuccess
+}
+
+func (c rebootCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subcommands.ExitStatus {
 	if !c.clear && c.time == 0 && !c.check {
 		fmt.Println(c.Usage())
 		fmt.Println("One of --clear, --time (non-zero), or --check must be set.")
 		return subcommands.ExitFailure
 	}
 	if c.clear {
-		if err := notification.CleanNotifications(cablib.SvcName); err != nil {
-			deck.ErrorfA("Failed to clear reboot notification: %v", err).With(eventID(cablib.EvtErrNotifications)).Go()
-		}
-		if err := cablib.ClearRebootTime(); err != nil {
-			if errors.Is(err, registry.ErrNotExist) {
-				fmt.Printf("No Cabbie reboot time found to clear.")
-				return subcommands.ExitSuccess
-			}
-			fmt.Printf("Failed to clear reboot time: %v", err)
-			return subcommands.ExitFailure
-		}
-		msg := "Cabbie reboot time has been manually cleared."
-		deck.InfoA(msg).With(eventID(cablib.EvtRebootRequired)).Go()
-		fmt.Print(msg)
-		return rc
+		return c.handleClear()
 	}
 	if c.time != 0 {
-		rebootTime := time.Now().Add(time.Second * time.Duration(c.time))
-		if err := notification.NewRebootMessage(rebootTime).Push(); err != nil {
-			deck.ErrorfA("Failed to create manually set reboot notification: %v", err).With(eventID(cablib.EvtErrNotifications)).Go()
-		}
-		if err := cablib.SetRebootTime(rebootTime); err != nil {
-			deck.ErrorfA("Failed to set reboot time: %v", err).With(eventID(cablib.EvtRebootRequired)).Go()
-			fmt.Printf("Failed to set reboot time: %v", err)
-			return subcommands.ExitFailure
-		}
-		msg := fmt.Sprintf("Cabbie reboot time has been manually set to %v", rebootTime)
-		deck.InfoA(msg).With(eventID(cablib.EvtRebootRequired)).Go()
-		fmt.Print(msg)
+		return c.handleSetTime()
 	}
 	if c.check {
-		pending, err := cablib.RebootRequired()
-		if err != nil {
-			msg := fmt.Sprintf("Failed to get reboot pending status: %v", err)
-			deck.ErrorfA(msg).With(eventID(cablib.EvtMisc)).Go()
-			fmt.Printf(msg)
-			return subcommands.ExitFailure
-		}
-		if !pending {
-			msg := "No reboot is pending."
-			deck.InfoA(msg).With(eventID(cablib.EvtMisc)).Go()
-			fmt.Println(msg)
-			return rc
-		}
-		rebootTime, err := cablib.RebootTime()
-		if err != nil {
-			msg := fmt.Sprintf("A reboot is pending, but failed to get reboot time: %v", err)
-			deck.ErrorfA(msg).With(eventID(cablib.EvtMisc)).Go()
-			fmt.Printf(msg)
-			return subcommands.ExitFailure
-		}
-		msg := fmt.Sprintf("A reboot is pending at %s.\n", rebootTime.String())
-		deck.InfoA(msg).With(eventID(cablib.EvtMisc)).Go()
-		fmt.Print(msg)
+		return c.handleCheck()
 	}
-	return rc
+	return subcommands.ExitSuccess
 }

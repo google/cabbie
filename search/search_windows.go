@@ -53,6 +53,34 @@ func (s *Searcher) configureRegistry() error {
 	return k.SetDWordValue("DoNotConnectToWindowsUpdateInternetLocations", 0)
 }
 
+// FindUpdates queries the Windows Update Agent for available updates using the given criteria.
+// If s is nil, FindUpdates creates a temporary UpdateSession and closes it when search finishes.
+// If s is non-nil, FindUpdates reuses the provided session and leaves session cleanup to the caller.
+// Returns the matching UpdateCollection, the search HResult metric string, and any error encountered.
+func FindUpdates(s *session.UpdateSession, criteria string, servers []string, thirdParty uint64) (*updatecollection.Collection, string, error) {
+	if s == nil {
+		sess, err := session.New()
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to create new Windows Update session: %w", err)
+		}
+		defer sess.Close()
+		s = sess
+	}
+
+	q, err := NewSearcher(s, criteria, servers, thirdParty)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create searcher: %w", err)
+	}
+	defer q.Close()
+
+	uc, err := q.QueryUpdates()
+	if err != nil {
+		return nil, q.SearchHResult, fmt.Errorf("error encountered when attempting to query for updates: %w", err)
+	}
+
+	return uc, q.SearchHResult, nil
+}
+
 // NewSearcher creates a default searcher object
 func NewSearcher(us *session.UpdateSession, criteria string, servers []string, thirdParty uint64) (*Searcher, error) {
 	w, errors := wsus.Init(servers)
@@ -80,61 +108,116 @@ func NewSearcher(us *session.UpdateSession, criteria string, servers []string, t
 	}, nil
 }
 
-// QueryUpdates uses the specified criteria to look up updates.
-func (s *Searcher) QueryUpdates() (*updatecollection.Collection, error) {
-	if err := s.configureRegistry(); err != nil {
-		return nil, fmt.Errorf("failed to set registry values: %v", err)
+func (s *Searcher) setupSearcherProperties() error {
+	r, err := oleutil.PutProperty(s.IUpdateSearcher, "ServerSelection", s.ServerSelection)
+	if r != nil {
+		defer r.Clear()
 	}
-
-	// Set Update searcher properties
-	if _, err := oleutil.PutProperty(s.IUpdateSearcher, "ServerSelection", s.ServerSelection); err != nil {
-		return nil, fmt.Errorf("failed to set server selection property: \n %v", err)
-	}
-
-	// Set Update ServiceID
-	if _, err := oleutil.PutProperty(s.IUpdateSearcher, "ServiceID", s.ServiceID); err != nil {
-		return nil, fmt.Errorf("failed to set serviceID property: \n %v", err)
-	}
-
-	// Search for updates
-	usr, err := oleutil.CallMethod(s.IUpdateSearcher, "Search", s.Criteria)
 	if err != nil {
-		s.SearchHResult = fmt.Sprintf("%s", errors.UpdateError(usr.Val))
-		return nil, fmt.Errorf("search error: [%s] [%v]", s.SearchHResult, err)
+		return fmt.Errorf("failed to set server selection property: \n %v", err)
 	}
+
+	r2, err := oleutil.PutProperty(s.IUpdateSearcher, "ServiceID", s.ServiceID)
+	if r2 != nil {
+		defer r2.Clear()
+	}
+	if err != nil {
+		return fmt.Errorf("failed to set serviceID property: \n %v", err)
+	}
+	return nil
+}
+
+func (s *Searcher) executeSearch() error {
+	if s.ISearchResult != nil {
+		s.ISearchResult.Release()
+		s.ISearchResult = nil
+	}
+
+	usr, err := oleutil.CallMethod(s.IUpdateSearcher, "Search", s.Criteria)
+	if usr != nil {
+		defer usr.Clear()
+	}
+	if err != nil {
+		if usr != nil {
+			s.SearchHResult = fmt.Sprintf("%s", errors.UpdateError(usr.Val))
+		}
+		return fmt.Errorf("search error: [%s] [%v]", s.SearchHResult, err)
+	}
+	if usr == nil {
+		return fmt.Errorf("search error: nil variant returned")
+	}
+
 	s.SearchHResult = fmt.Sprintf("%s", errors.UpdateError(cablib.S_OK))
 	s.ISearchResult = usr.ToIDispatch()
+	return nil
+}
 
-	// Get list of returned updates
+func (s *Searcher) extractCollection() (*updatecollection.Collection, error) {
 	upd, err := oleutil.GetProperty(s.ISearchResult, "Updates")
+	if upd != nil {
+		defer upd.Clear()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("error getting Updates collection, %s", err.Error())
 	}
+	if upd == nil {
+		return nil, fmt.Errorf("error getting Updates collection: nil variant returned")
+	}
 
-	// Save list to collection
-	updd := updatecollection.Collection{IUpdateCollection: upd.ToIDispatch()}
+	updd := &updatecollection.Collection{IUpdateCollection: upd.ToIDispatch()}
+	var errRet error
+	defer func() {
+		if errRet != nil {
+			updd.Close()
+		}
+	}()
 
 	count, err := updd.Count()
 	if err != nil {
-		return nil, err
+		errRet = err
+		return nil, errRet
 	}
 
 	updd.Updates = make([]*updates.Update, count)
 	for i := 0; i < count; i++ {
 		item, err := oleutil.GetProperty(updd.IUpdateCollection, "item", i)
 		if err != nil {
-			return nil, err
+			errRet = err
+			return nil, errRet
 		}
 		itemd := item.ToIDispatch()
 
 		up, errors := updates.New(itemd)
 		if errors != nil {
-			return nil, fmt.Errorf("errors in update enumeration: %v", errors)
+			itemd.Release()
+			_ = item.Clear()
+			errRet = fmt.Errorf("errors in update enumeration: %v", errors)
+			return nil, errRet
 		}
 		updd.Updates[i] = up
-
+		_ = item.Clear()
 	}
-	return &updd, nil
+	return updd, nil
+}
+
+// QueryUpdates uses the specified criteria to look up updates.
+func (s *Searcher) QueryUpdates() (*updatecollection.Collection, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.configureRegistry(); err != nil {
+		return nil, fmt.Errorf("failed to set registry values: %v", err)
+	}
+
+	if err := s.setupSearcherProperties(); err != nil {
+		return nil, err
+	}
+
+	if err := s.executeSearch(); err != nil {
+		return nil, err
+	}
+
+	return s.extractCollection()
 }
 
 // ResultCode gets an OperationResultCode enumeration that specifies the result of a search.
@@ -146,7 +229,16 @@ func (s *Searcher) QueryUpdates() (*updatecollection.Collection, error) {
 // 4 - (orcFailed)	The operation failed to complete.
 // 5 - (orcAborted)	The operation is canceled.
 func (s *Searcher) ResultCode() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.ISearchResult == nil {
+		return 0, fmt.Errorf("ISearchResult is nil")
+	}
 	rc, err := oleutil.GetProperty(s.ISearchResult, "ResultCode")
+	if rc != nil {
+		defer rc.Clear()
+	}
 	if err != nil {
 		return 0, fmt.Errorf("error getting ResultCode property: %v", err)
 	}
@@ -155,7 +247,16 @@ func (s *Searcher) ResultCode() (int, error) {
 
 // GetTotalHistoryCount returns the number of update events on the computer.
 func (s *Searcher) GetTotalHistoryCount() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.IUpdateSearcher == nil {
+		return 0, fmt.Errorf("IUpdateSearcher is nil")
+	}
 	c, err := oleutil.CallMethod(s.IUpdateSearcher, "GetTotalHistoryCount")
+	if c != nil {
+		defer c.Clear()
+	}
 	if err != nil {
 		return 0, fmt.Errorf("error getting update history count: %v", err)
 	}
@@ -165,17 +266,39 @@ func (s *Searcher) GetTotalHistoryCount() (int, error) {
 
 // QueryHistory synchronously queries the computer for the history of the update events.
 func (s *Searcher) QueryHistory(count int) (*ole.IDispatch, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.IUpdateSearcher == nil {
+		return nil, fmt.Errorf("IUpdateSearcher is nil")
+	}
 	h, err := oleutil.CallMethod(s.IUpdateSearcher, "QueryHistory", 0, count)
 	if err != nil {
+		if h != nil {
+			_ = h.Clear()
+		}
 		return nil, fmt.Errorf("error querying list of installed updates: %v", err)
+	}
+	if h == nil {
+		return nil, fmt.Errorf("error querying list of installed updates: nil variant returned")
 	}
 	return h.ToIDispatch(), nil
 }
 
 // Close releases objects created during search.
 func (s *Searcher) Close() {
-	s.IUpdateSearcher.Release()
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.IUpdateSearcher != nil {
+		s.IUpdateSearcher.Release()
+		s.IUpdateSearcher = nil
+	}
 	if s.ISearchResult != nil {
 		s.ISearchResult.Release()
+		s.ISearchResult = nil
 	}
 }

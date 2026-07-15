@@ -19,45 +19,81 @@
 package notification
 
 import (
+	"golang.org/x/net/context"
 	"fmt"
+	"os/exec"
+	"syscall"
 	"time"
 
 	"gopkg.in/toast.v1"
 )
 
+// CleanNotifications deletes any active Cabbie notification messages.
+func CleanNotifications(name string) error {
+	if name == "" {
+		name = appID
+	}
+	psCmd := fmt.Sprintf(`try { [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null; [Windows.UI.Notifications.ToastNotificationManager]::History.Clear('%s') } catch {}`, name)
+	cmd := exec.Command("PowerShell", "-ExecutionPolicy", "Bypass", "-Command", psCmd)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	_ = cmd.Run()
+	return nil
+}
+
+// ToastNotification wraps toast.Notification to accept context.Context.
+type ToastNotification struct {
+	toast.Notification
+}
+
+// Push triggers the toast notification.
+func (n *ToastNotification) Push(ctx context.Context) error {
+	if ctx != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return n.Notification.Push()
+}
+
 // NewRebootMessage returns a standard reboot message.
 func NewRebootMessage(t time.Time) Notification {
 	tf := t.Format(time.UnixDate)
-	return &toast.Notification{
-		AppID:   appID,
-		Title:   "Reboot Your Machine",
-		Message: fmt.Sprintf("Reboot now to finish installing updates. Your machine will auto reboot at %s.", tf),
+	return &ToastNotification{
+		Notification: toast.Notification{
+			AppID:   appID,
+			Title:   "Reboot Your Machine",
+			Message: fmt.Sprintf("Reboot now to finish installing updates. Your machine will auto reboot at %s.", tf),
+		},
 	}
 }
 
 // RebootPopup returns a reboot warning popup message.
 func RebootPopup(minutes int) Notification {
-	return &toast.Notification{
-		AppID:   appID,
-		Title:   "Force Reboot Soon",
-		Message: fmt.Sprintf("To finish installing the newest updates, your machine will auto reboot in %d minutes.", minutes),
+	return &ToastNotification{
+		Notification: toast.Notification{
+			AppID:   appID,
+			Title:   "Force Reboot Soon",
+			Message: fmt.Sprintf("To finish installing the newest updates, your machine will auto reboot in %d minutes.", minutes),
+		},
 	}
 }
 
 // NewAvailableUpdateMessage returns an available updates message.
 func NewAvailableUpdateMessage() Notification {
-	return &toast.Notification{
-		AppID:   appID,
-		Title:   "Updates Available",
-		Message: "New Windows updates are now available. Please install at your earliest convenience.",
+	return &ToastNotification{
+		Notification: toast.Notification{
+			AppID:   appID,
+			Title:   "Updates Available",
+			Message: "New Windows updates are now available. Please install at your earliest convenience.",
+		},
 	}
 }
 
 // NewInstallingMessage returns an installing updates message.
 func NewInstallingMessage() Notification {
-	return &toast.Notification{
-		AppID:   appID,
-		Title:   "Installing Updates",
-		Message: "Cabbie is installing new updates.",
+	return &ToastNotification{
+		Notification: toast.Notification{
+			AppID:   appID,
+			Title:   "Installing Updates",
+			Message: "Cabbie is installing new updates.",
+		},
 	}
 }

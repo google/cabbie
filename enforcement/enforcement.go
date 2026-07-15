@@ -19,11 +19,13 @@
 package enforcement
 
 import (
+	"golang.org/x/net/context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/google/cabbie/cablib"
 
@@ -36,8 +38,23 @@ var (
 	errInvalidFile = errors.New("file path is invalid")
 	errParsing     = errors.New("could not parse file content")
 
-	enforceDir = filepath.Join(os.Getenv("ProgramData"), `\Cabbie`)
+	enforceDirMu sync.RWMutex
+	enforceDir   = filepath.Join(os.Getenv("ProgramData"), `\Cabbie`)
 )
+
+// SetEnforceDir sets the enforcement directory path.
+func SetEnforceDir(path string) {
+	enforceDirMu.Lock()
+	defer enforceDirMu.Unlock()
+	enforceDir = path
+}
+
+// EnforceDir returns the current enforcement directory path.
+func EnforceDir() string {
+	enforceDirMu.RLock()
+	defer enforceDirMu.RUnlock()
+	return enforceDir
+}
 
 // Enforcements track any externally configured update enforcements.
 type Enforcements struct {
@@ -60,15 +77,11 @@ func enforcements(path string) (Enforcements, error) {
 	if filepath.Ext(path) != ".json" {
 		return e, fmt.Errorf("%w: %q", errFileType, path)
 	}
-	b, err := helpers.PathExists(path)
-	if err != nil {
-		return e, fmt.Errorf("error determining %q existence: %v", path, err)
-	}
-	if !b {
-		return e, fmt.Errorf("%w: %q", errInvalidFile, path)
-	}
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return e, fmt.Errorf("%w: %q", errInvalidFile, path)
+		}
 		return e, fmt.Errorf("error reading file %q: %v", path, err)
 	}
 	if err := json.Unmarshal(data, &e); err != nil {
@@ -80,12 +93,13 @@ func enforcements(path string) (Enforcements, error) {
 // Get attempts to return all known external enforcements.
 func Get() (Enforcements, error) {
 	var ret Enforcements
-	files, err := os.ReadDir(enforceDir)
+	dir := EnforceDir()
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		return ret, err
 	}
 	for _, f := range files {
-		p := filepath.Join(enforceDir, f.Name())
+		p := filepath.Join(dir, f.Name())
 		e, err := enforcements(p)
 		if err != nil {
 			// TODO(mattl): surface errors here somehow
@@ -100,24 +114,9 @@ func Get() (Enforcements, error) {
 	return ret, nil
 }
 
-// go generics are super new. The following two funcs should be merged
-// into one generic one after the dust has settled.
-
-func uniqueStrings(list []string) []string {
-	u := make([]string, 0)
-	m := make(map[string]bool)
-	for _, v := range list {
-		if !m[v] {
-			m[v] = true
-			u = append(u, v)
-		}
-	}
-	return u
-}
-
-func uniqueDriverExclude(list []DriverExclude) []DriverExclude {
-	u := make([]DriverExclude, 0)
-	m := make(map[DriverExclude]bool)
+func unique[T comparable](list []T) []T {
+	u := make([]T, 0, len(list))
+	m := make(map[T]bool, len(list))
 	for _, v := range list {
 		if !m[v] {
 			m[v] = true
@@ -128,40 +127,79 @@ func uniqueDriverExclude(list []DriverExclude) []DriverExclude {
 }
 
 func (e *Enforcements) dedupe() {
-	e.Required = uniqueStrings(e.Required)
-	e.Hidden = uniqueStrings(e.Hidden)
-	e.HiddenUpdateID = uniqueStrings(e.HiddenUpdateID)
-	e.ExcludedDrivers = uniqueDriverExclude(e.ExcludedDrivers)
+	e.Required = unique(e.Required)
+	e.Hidden = unique(e.Hidden)
+	e.HiddenUpdateID = unique(e.HiddenUpdateID)
+	e.ExcludedDrivers = unique(e.ExcludedDrivers)
+}
+
+func setupWatcher(dir string) (*fsnotify.Watcher, error) {
+	fsw, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, fmt.Errorf("enforce: error creating filesystem watcher:\n%v", err)
+	}
+
+	exist, err := helpers.PathExists(dir)
+	if err != nil {
+		fsw.Close()
+		return nil, fmt.Errorf("enforce: error checking existence of %q:\n%v", dir, err)
+	}
+	if !exist {
+		if err := os.MkdirAll(dir, 0664); err != nil {
+			fsw.Close()
+			return nil, fmt.Errorf("enforce: error creating %q:\n%v", dir, err)
+		}
+	}
+
+	if err := fsw.Add(dir); err != nil {
+		fsw.Close()
+		return nil, fmt.Errorf("enforce: error adding %q to filesystem watcher:\n%v", dir, err)
+	}
+
+	return fsw, nil
+}
+
+func watchLoop(ctx context.Context, fsw *fsnotify.Watcher, file chan<- string) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case evt, ok := <-fsw.Events:
+			if !ok {
+				return nil
+			}
+			if cablib.SliceContains([]fsnotify.Op{fsnotify.Write, fsnotify.Create}, evt.Op) {
+				select {
+				case file <- evt.Name:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+		case err, ok := <-fsw.Errors:
+			if !ok {
+				return nil
+			}
+			if err != nil {
+				return fmt.Errorf("enforce: watcher error: %v", err)
+			}
+		}
+	}
 }
 
 // Watcher runs a filesystem watcher for required updates. This is meant to install required updates as soon as they are configured.
 // All configured required updates are read on a schedule (see cabbie.go t.Enforcement ticker usage) to ensure required
 // updates are installed even if a filesystem event is missed.
-func Watcher(file chan<- string) error {
-	fsw, err := fsnotify.NewWatcher()
+func Watcher(ctx context.Context, file chan<- string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	dir := EnforceDir()
+	fsw, err := setupWatcher(dir)
 	if err != nil {
-		return fmt.Errorf("enforce: error creating filesystem watcher:\n%v", err)
+		return err
 	}
 	defer fsw.Close()
 
-	exist, err := helpers.PathExists(enforceDir)
-	if err != nil {
-		return fmt.Errorf("enforce: error checking existence of %q:\n%v", enforceDir, err)
-	}
-	if !exist {
-		if err := os.MkdirAll(enforceDir, 0664); err != nil {
-			return fmt.Errorf("enforce: error creating %q:\n%v", enforceDir, err)
-		}
-	}
-
-	if err := fsw.Add(enforceDir); err != nil {
-		return fmt.Errorf("enforce: error adding %q to filesystem watcher:\n%v", enforceDir, err)
-	}
-
-	for {
-		evt := <-fsw.Events
-		if cablib.SliceContains([]fsnotify.Op{fsnotify.Write, fsnotify.Create}, evt.Op) {
-			file <- evt.Name
-		}
-	}
+	return watchLoop(ctx, fsw, file)
 }
+

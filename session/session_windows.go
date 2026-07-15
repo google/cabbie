@@ -34,21 +34,43 @@ func New() (*UpdateSession, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new COM object: %v", err)
 	}
-	oleutil.PutProperty(session, "ClientApplicationID", clientID)
+	r, err := oleutil.PutProperty(session, "ClientApplicationID", clientID)
+	if r != nil {
+		defer r.Clear()
+	}
+	if err != nil {
+		session.Release()
+		return nil, fmt.Errorf("failed to set ClientApplicationID property: %v", err)
+	}
 	return &UpdateSession{Session: session}, nil
 }
 
 // CreateInterface creates the requested update interface.
 // updateInterface can be one of: Searcher, Downloader, or Installer.
 func (u *UpdateSession) CreateInterface(ui updateInterface) (*ole.IDispatch, error) {
+	if u.Session == nil {
+		return nil, fmt.Errorf("Session is nil")
+	}
 	us, err := oleutil.CallMethod(u.Session, string(ui))
 	if err != nil {
+		if us != nil {
+			us.Clear()
+		}
 		return nil, fmt.Errorf("error creating requested interface: %v", err)
+	}
+	if us == nil {
+		return nil, fmt.Errorf("error creating requested interface: nil variant returned")
 	}
 	return us.ToIDispatch(), nil
 }
 
 // Close turns down any open update sessions.
 func (u *UpdateSession) Close() {
-	u.Session.Release()
+	if u == nil {
+		return
+	}
+	if u.Session != nil {
+		u.Session.Release()
+		u.Session = nil
+	}
 }

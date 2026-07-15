@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,16 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package notification provides user notification messages.
-package notification
+//go:build windows
+// +build windows
 
-import "golang.org/x/net/context"
+package main
 
-const appID = "Cabbie"
+import (
+	"testing"
 
+	"flag"
+)
 
+func TestHistoryCmdMetadata(t *testing.T) {
+	cmd := &historyCmd{}
 
-// Notification defines a type notification for a cabbie event.
-type Notification interface {
-	Push(ctx context.Context) error
+	if got := cmd.Name(); got != "history" {
+		t.Errorf("Name() = %q, want %q", got, "history")
+	}
+	if got := cmd.Synopsis(); got == "" {
+		t.Errorf("Synopsis() is empty")
+	}
+	if got := cmd.Usage(); got == "" {
+		t.Errorf("Usage() is empty")
+	}
+}
+
+func TestHistoryCmdSetFlags(t *testing.T) {
+	cmd := &historyCmd{}
+	fs := flag.NewFlagSet("history", flag.ContinueOnError)
+	cmd.SetFlags(fs)
 }

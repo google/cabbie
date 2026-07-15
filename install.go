@@ -28,10 +28,12 @@ import (
 	"github.com/google/cabbie/notification"
 	"github.com/google/cabbie/cablib"
 	"github.com/google/cabbie/download"
+	"github.com/google/cabbie/enforcement"
 	"github.com/google/cabbie/install"
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatecollection"
+	"github.com/google/cabbie/updates"
 	"github.com/google/deck"
 	"github.com/google/aukera/client"
 	"github.com/google/subcommands"
@@ -69,8 +71,6 @@ func (i *installCmd) SetFlags(f *flag.FlagSet) {
 
 var (
 	errInvalidFlags = errors.New("invalid flag combination")
-	rebootList      = []string{}
-	rebootTime      time.Time
 )
 
 func vetFlags(i installCmd) error {
@@ -140,7 +140,7 @@ func (i *installCmd) criteria() (string, []string) {
 func installingMessage() {
 	deck.InfoA("Cabbie is installing new updates.").With(eventID(cablib.EvtInstall)).Go()
 
-	if err := notification.NewInstallingMessage().Push(); err != nil {
+	if err := notification.NewInstallingMessage().Push(context.Background()); err != nil {
 		deck.ErrorfA("Failed to create notification:\n%v", err).With(eventID(cablib.EvtErrNotifications)).Go()
 	}
 }
@@ -148,19 +148,25 @@ func installingMessage() {
 func rebootMessage(t time.Time) {
 	deck.InfoA("Updates have been installed, please reboot to complete the installation...").With(eventID(cablib.EvtInstallSuccess)).Go()
 
-	if err := notification.NewRebootMessage(t).Push(); err != nil {
+	if err := notification.NewRebootMessage(t).Push(context.Background()); err != nil {
 		deck.ErrorfA("Failed to create notification:\n%v", err).With(eventID(cablib.EvtErrNotifications)).Go()
 	}
 }
 
 func downloadCollection(s *session.UpdateSession, c *updatecollection.Collection) (int, error) {
+	if s == nil {
+		return 0, errors.New("update session is nil")
+	}
+	if c == nil {
+		return 0, errors.New("update collection is nil")
+	}
 	d, err := download.NewDownloader(s, c)
 	if err != nil {
 		return 0, fmt.Errorf("error creating downloader:\n %v", err)
 	}
 	defer d.Close()
 
-	if err := d.Download(); err != nil {
+	if err := d.Download(context.Background()); err != nil {
 		return 0, fmt.Errorf("error downloading updates:\n %v", err)
 	}
 
@@ -196,13 +202,19 @@ func fetchDetailedUpdateError(ctx context.Context, title string) (string, bool) 
 }
 
 func installCollection(s *session.UpdateSession, c *updatecollection.Collection, ipu bool) (*installRsp, error) {
+	if s == nil {
+		return nil, errors.New("update session is nil")
+	}
+	if c == nil {
+		return nil, errors.New("update collection is nil")
+	}
 	inst, err := install.NewInstaller(s, c)
 	if err != nil {
 		return nil, fmt.Errorf("error creating installer: \n %v", err)
 	}
 	defer inst.Close()
 
-	if err := inst.Install(); err != nil {
+	if err := inst.Install(context.Background()); err != nil {
 		return nil, fmt.Errorf("error installing updates:\n %v", err)
 	}
 
@@ -222,7 +234,7 @@ func installCollection(s *session.UpdateSession, c *updatecollection.Collection,
 	}
 
 	if ipu {
-		if err := inst.Commit(); err != nil {
+		if err := inst.Commit(context.Background()); err != nil {
 			return nil, fmt.Errorf("error committing updates:\n %v", err)
 		}
 	}
@@ -234,6 +246,393 @@ func installCollection(s *session.UpdateSession, c *updatecollection.Collection,
 	}, err
 }
 
+func checkPendingReboot(interactive bool) (bool, error) {
+	rebootRequired, err := cablib.RebootRequired()
+	if err != nil {
+		return false, fmt.Errorf("failed to determine reboot status: %v", err)
+	}
+
+	if rebootRequired {
+		if interactive {
+			fmt.Println("Host has existing updates pending reboot.")
+			rebootEvent <- rebootRequired
+			return true, nil
+		}
+		t, err := cablib.RebootTime()
+		if err != nil {
+			return false, fmt.Errorf("Error getting reboot time: %v", err)
+		}
+		if t.IsZero() {
+			return true, nil
+		}
+		rebootEvent <- rebootRequired
+		return true, nil
+	}
+	return false, nil
+}
+
+func isDriverExcluded(u *updates.Update, excludes []enforcement.DriverExclude) bool {
+	if u == nil {
+		return false
+	}
+	for _, e := range excludes {
+		t := time.Time{}
+		if e.DriverDateVer != "" {
+			var err error
+			t, err = time.Parse("2006-01-02", e.DriverDateVer)
+			if err != nil {
+				deck.WarningfA("Failed to parse driver date version provided in exclusion json: %v", err).With(eventID(cablib.EvtErrDriverExclusion)).Go()
+			}
+		}
+		driverFilterExists := e.DriverClass != "" || !t.IsZero()
+		driverClassMatch := e.DriverClass == "" || e.DriverClass == u.DriverClass
+		driverVersionMatch := t.IsZero() || t.Equal(u.DriverVerDate)
+		if driverFilterExists && driverClassMatch && driverVersionMatch {
+			deck.InfofA(
+				"Driver update %q excluded.\nFiltered driver class: %q\nFiltered driver date version: %q",
+				u.Title, e.DriverClass, e.DriverDateVer,
+			).With(eventID(cablib.EvtDriverUpdateExcluded)).Go()
+			return true
+		}
+	}
+	return false
+}
+
+func (i *installCmd) shouldSkipUpdate(u *updates.Update, rc []string, kbs KBSet) bool {
+	if u == nil {
+		return true
+	}
+	if !(u.InCategories(rc)) {
+		deck.InfofA("Skipping update %s.\nRequiredClassifications:\n%v\nUpdate classifications:\n%v",
+			u.Title, rc, u.Categories).With(eventID(cablib.EvtUpdateSkip)).Go()
+		return true
+	}
+
+	if kbs.Size() > 0 && !kbs.Search(u.KBArticleIDs) {
+		deck.InfofA("Skipping update %s.\nRequired KBs:\n%s\nUpdate KBs:\n%v",
+			u.Title, kbs, u.KBArticleIDs).With(eventID(cablib.EvtUpdateSkip)).Go()
+		return true
+	}
+
+	if i.deadlineOnly {
+		deadline := time.Duration(config.Deadline) * 24 * time.Hour
+		pastDeadline := time.Now().After(u.LastDeploymentChangeTime.Add(deadline))
+		if u.DriverClass != "" {
+			deck.InfofA(
+				"Skipping driver %s with class %s and date version %s.\nDrivers are only installed during a maintenance window at this time.",
+				u.Title, u.DriverClass, u.DriverVerDate).With(eventID(cablib.EvtUpdateSkip)).Go()
+			return true
+		}
+		if !pastDeadline {
+			deck.InfofA(
+				"Skipping update %s.\nUpdate deployed on %v has not reached the %d day threshold.",
+				u.Title, u.LastDeploymentChangeTime, config.Deadline).With(eventID(cablib.EvtUpdateSkip)).Go()
+			return true
+		}
+		deck.InfofA(
+			"Update %s deployed on %v has exceeded the %d day threshold.",
+			u.Title, u.LastDeploymentChangeTime, config.Deadline).With(eventID(cablib.EvtUpdatesFound)).Go()
+	}
+
+	return false
+}
+
+func runScript(scriptName, scriptType string) {
+	ps := filepath.Join(cablib.CabbiePath, scriptName)
+	exist, err := helpers.PathExists(ps)
+	if err != nil {
+		deck.ErrorfA("%s: error checking existence of %q:\n%v", scriptType, ps, err).With(eventID(cablib.EvtErrUpdateScript)).Go()
+	} else if exist {
+		if _, err := helpers.ExecWithVerify(ps, nil, &config.ScriptTimeout, nil); err != nil {
+			deck.ErrorfA("%s: error running script:\n%v", scriptType, err).With(eventID(cablib.EvtErrUpdateScript)).Go()
+		}
+	}
+}
+
+func scheduleReboot(rebootList []string) {
+	if len(rebootList) > 0 {
+		if err := cablib.AddRebootUpdates(rebootList); err != nil {
+			deck.ErrorfA("Failed to write updates requiring reboot to registry: %v", err).With(eventID(cablib.EvtRebootRequired)).Go()
+		}
+	}
+
+	now := time.Now()
+	timerEnd := now.Add(time.Second * time.Duration(config.RebootDelay))
+	rebootTime := timerEnd
+	if config.ActiveHoursEnabled == 1 {
+		ah, err := client.Label(int(config.AukeraPort), `active_hours`)
+		if err != nil {
+			deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
+		}
+		if len(ah) != 0 {
+			todayEnd := ah[0].Closes
+			tomorrowEnd := todayEnd.Add(time.Hour * time.Duration(24))
+			if todayEnd.After(now) {
+				rebootTime = todayEnd
+			} else {
+				rebootTime = tomorrowEnd
+			}
+		}
+	}
+	rebootMessage(rebootTime)
+	if err := cablib.SetRebootTime(rebootTime); err != nil {
+		deck.ErrorfA("Failed to set reboot time:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
+	}
+	rebootEvent <- true
+}
+
+// UpdateOptions holds options and criteria for update operations.
+type UpdateOptions struct {
+	RequiredCategories []string
+	KBSet              KBSet
+	DriverExcludes     []enforcement.DriverExclude
+	DeadlineOnly       bool
+}
+
+// UpdateResult contains the result of processing a single update.
+type UpdateResult struct {
+	Skipped        bool
+	Downloaded     bool
+	Installed      bool
+	RebootRequired bool
+	KBArticleIDs   []string
+	Err            error
+}
+
+// UpdateRunner orchestrates downloading and installing updates while tracking reboot and notification state.
+type UpdateRunner struct {
+	ctx     context.Context
+	session *session.UpdateSession
+	cmd     *installCmd
+	options UpdateOptions
+
+	installMsgPopped bool
+	installedAny     bool
+	anyReboot        bool
+	rebootList       []string
+}
+
+// NewUpdateRunner creates a new UpdateRunner instance.
+func NewUpdateRunner(ctx context.Context, s *session.UpdateSession, cmd *installCmd, opts UpdateOptions) *UpdateRunner {
+	initialMsgPopped := false
+	if cmd != nil {
+		initialMsgPopped = cmd.virusDef
+	}
+	return &UpdateRunner{
+		ctx:              ctx,
+		session:          s,
+		cmd:              cmd,
+		options:          opts,
+		installMsgPopped: initialMsgPopped,
+	}
+}
+
+func (r *UpdateRunner) shouldSkip(u *updates.Update) bool {
+	if u == nil {
+		return true
+	}
+	if isDriverExcluded(u, r.options.DriverExcludes) {
+		return true
+	}
+	if r.cmd != nil {
+		return r.cmd.shouldSkipUpdate(u, r.options.RequiredCategories, r.options.KBSet)
+	}
+	return false
+}
+
+func (r *UpdateRunner) ensureEulaAccepted(u *updates.Update) {
+	if u == nil {
+		return
+	}
+	if !(u.EulaAccepted) {
+		deck.InfofA("Accepting EULA for update: %s", u.Title).With(eventID(cablib.EvtMisc)).Go()
+		if err := u.AcceptEula(); err != nil {
+			deck.ErrorfA("Failed to accept EULA for update %s:\n%s", u.Title, err).With(eventID(cablib.EvtErrMisc)).Go()
+		}
+	}
+}
+
+func (r *UpdateRunner) triggerPreUpdateHooks(u *updates.Update) {
+	if u == nil {
+		return
+	}
+	if !r.installMsgPopped && !u.InCategories([]string{"Definition Updates"}) {
+		installingMessage()
+		r.installMsgPopped = true
+		runScript("PreUpdate.ps1", "PreUpdateScript")
+		r.installedAny = true
+	}
+}
+
+func (r *UpdateRunner) downloadSingleUpdate(u *updates.Update, c *updatecollection.Collection) error {
+	if u == nil {
+		return errors.New("cannot download nil update")
+	}
+	if c == nil {
+		return errors.New("cannot download nil collection")
+	}
+	if r == nil || r.session == nil {
+		return errors.New("cannot download with nil session")
+	}
+	deck.InfofA("Downloading Update:\n%v", u).With(eventID(cablib.EvtDownload)).Go()
+
+	dlRc, err := downloadCollection(r.session, c)
+	if err != nil {
+		deck.ErrorA(err).With(eventID(cablib.EvtErrMisc)).Go()
+		return err
+	}
+	if dlRc == 2 {
+		deck.InfofA("Successfully downloaded update:\n %s", u.Title).With(eventID(cablib.EvtDownload)).Go()
+		return nil
+	}
+	err = fmt.Errorf("failed to download update: %s, ReturnCode: %d", u.Title, dlRc)
+	deck.ErrorfA("Failed to download update:\n %s\n ReturnCode: %d", u.Title, dlRc).With(eventID(cablib.EvtErrDownloadFailure)).Go()
+	return err
+}
+
+func (r *UpdateRunner) installSingleUpdate(u *updates.Update, c *updatecollection.Collection) (*installRsp, error) {
+	if u == nil {
+		return nil, errors.New("cannot install nil update")
+	}
+	if c == nil {
+		return nil, errors.New("cannot install nil collection")
+	}
+	if r == nil || r.session == nil {
+		return nil, errors.New("cannot install with nil session")
+	}
+	deck.InfofA("Installing Update:\n%v", u).With(eventID(cablib.EvtInstall)).Go()
+
+	ipu := u.InCategories([]string{"Upgrades"})
+
+	rsp, err := installCollection(r.session, c, ipu)
+	if err != nil {
+		deck.ErrorA(err).With(eventID(cablib.EvtErrMisc)).Go()
+		return nil, err
+	}
+
+	if installHResult != nil {
+		if err := installHResult.Set(rsp.hResult); err != nil {
+			deck.ErrorfA("Error posting metric:\n%v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
+		}
+	}
+	if rsp.resultCode == 2 {
+		deck.InfofA("Successfully installed update:\n%s\nHResult Code: %s", u.Title, rsp.hResult).With(eventID(cablib.EvtInstall)).Go()
+		return rsp, nil
+	}
+
+	deck.ErrorfA("Failed to install update:\n%s\nReturnCode: %d\nHResult Code: %s", u.Title, rsp.resultCode, rsp.hResult).With(eventID(cablib.EvtErrInstallFailure)).Go()
+	if r != nil && r.ctx != nil {
+		if code, ok := fetchDetailedUpdateError(r.ctx, u.Title); ok {
+			deck.WarningfA("Detailed error for update %q from Windows Update Client log: %s", u.Title, code).Go()
+		}
+	}
+	return rsp, fmt.Errorf("install failed with resultCode %d", rsp.resultCode)
+}
+
+func (r *UpdateRunner) recordRebootState(u *updates.Update, rsp *installRsp) {
+	if u == nil || rsp == nil {
+		return
+	}
+	deck.InfofA("Install of KB %s; Reboot Required: %t", u.KBArticleIDs, rsp.rebootRequired).With(eventID(cablib.EvtRebootRequired)).Go()
+
+	if rsp.rebootRequired && !u.InCategories([]string{"Definition Updates"}) {
+		r.anyReboot = true
+		deck.InfofA("Adding KB %s to reboot list.", u.KBArticleIDs).With(eventID(cablib.EvtRebootRequired)).Go()
+		r.rebootList = append(r.rebootList, u.KBArticleIDs...)
+	}
+
+	if rsp.rebootRequired && u.InCategories([]string{"Upgrades"}) {
+		if err := cablib.SetInstallAtShutdown(); err != nil {
+			deck.ErrorfA("Failed to set `InstallAtShutdown` registry value: %v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
+		}
+	}
+}
+
+// ProcessSingleUpdate handles downloading and installing a single update item.
+func (r *UpdateRunner) ProcessSingleUpdate(u *updates.Update) UpdateResult {
+	if u == nil {
+		return UpdateResult{Skipped: true, Err: errors.New("cannot process nil update")}
+	}
+	if r.shouldSkip(u) {
+		return UpdateResult{Skipped: true}
+	}
+
+	r.ensureEulaAccepted(u)
+
+	c, err := updatecollection.New()
+	if err != nil {
+		deck.ErrorfA("Failed to create collection: %v", err).With(eventID(cablib.EvtErrMisc)).Go()
+		return UpdateResult{Err: err}
+	}
+	defer c.Close()
+
+	if err := c.Add(u.Item); err != nil {
+		deck.ErrorfA("Failed to add update to collection: %v", err).With(eventID(cablib.EvtErrMisc)).Go()
+		return UpdateResult{Err: err}
+	}
+
+	r.triggerPreUpdateHooks(u)
+
+	if err := r.downloadSingleUpdate(u, c); err != nil {
+		return UpdateResult{Err: err}
+	}
+
+	rsp, err := r.installSingleUpdate(u, c)
+	if err != nil {
+		return UpdateResult{Downloaded: true, Err: err}
+	}
+
+	r.recordRebootState(u, rsp)
+
+	return UpdateResult{
+		Downloaded:     true,
+		Installed:      true,
+		RebootRequired: rsp.rebootRequired,
+		KBArticleIDs:   u.KBArticleIDs,
+	}
+}
+
+// Finalize executes post-update scripts and schedules reboots if required.
+func (r *UpdateRunner) Finalize() {
+	if r.installedAny {
+		runScript("PostUpdate.ps1", "PostUpdateScript")
+	}
+
+	if r.anyReboot || len(r.rebootList) > 0 {
+		scheduleReboot(r.rebootList)
+	}
+}
+
+func (i *installCmd) processSingleUpdate(
+	ctx context.Context,
+	s *session.UpdateSession,
+	u *updates.Update,
+	rc []string,
+	kbs KBSet,
+	excludes []enforcement.DriverExclude,
+	installMsgPopped *bool,
+	installingMinOneUpdate *bool,
+	anyRebootRequired *bool,
+	rebootList *[]string,
+) {
+	runner := &UpdateRunner{
+		ctx:              ctx,
+		session:          s,
+		cmd:              i,
+		options:          UpdateOptions{RequiredCategories: rc, KBSet: kbs, DriverExcludes: excludes, DeadlineOnly: i.deadlineOnly},
+		installMsgPopped: *installMsgPopped,
+		installedAny:     *installingMinOneUpdate,
+		anyReboot:        *anyRebootRequired,
+		rebootList:       *rebootList,
+	}
+	res := runner.ProcessSingleUpdate(u)
+	*installMsgPopped = runner.installMsgPopped
+	*installingMinOneUpdate = runner.installedAny
+	*anyRebootRequired = runner.anyReboot
+	*rebootList = runner.rebootList
+	_ = res
+}
+
 func (i *installCmd) installUpdates(ctx context.Context) error {
 	// If monthly patches are disabled, and no specific update type was requested, do nothing.
 	if config.InstallMonthlyPatches == 0 && !i.all && !i.drivers && !i.virusDef && i.kbs == "" {
@@ -241,32 +640,10 @@ func (i *installCmd) installUpdates(ctx context.Context) error {
 		return nil
 	}
 	// Check for reboot status when not installing virus definitions.
-	if !(i.virusDef) {
-		rebootRequired, err := cablib.RebootRequired()
-		if err != nil {
-			return fmt.Errorf("failed to determine reboot status: %v", err)
-		}
-
-		if rebootRequired {
-			if i.Interactive {
-				fmt.Println("Host has existing updates pending reboot.")
-				rebootEvent <- rebootRequired
-				return nil
-			}
-			t, err := cablib.RebootTime()
-			if err != nil {
-				return fmt.Errorf("Error getting reboot time: %v", err)
-			}
-			if t.IsZero() {
-				// Don't trigger a reboot if one is pending but no time has been set.
-				// This can happen when updates are installed outside of Cabbie.
-				//
-				// TODO(b/402737358): Consider reverting this once installs outside of
-				// maintenance windows are root-caused for causing daily reboots.
-				return nil
-			}
-			rebootEvent <- rebootRequired
-			return nil
+	if !i.virusDef {
+		pending, err := checkPendingReboot(i.Interactive)
+		if err != nil || pending {
+			return err
 		}
 	}
 
@@ -279,18 +656,14 @@ func (i *installCmd) installUpdates(ctx context.Context) error {
 
 	criteria, rc := i.criteria()
 
-	q, err := search.NewSearcher(s, criteria, config.WSUSServers, config.EnableThirdParty)
-	if err != nil {
-		return fmt.Errorf("failed to create a new searcher object: %v", err)
-	}
-	defer q.Close()
-
-	uc, err := q.QueryUpdates()
-	if er := searchHResult.Set(q.SearchHResult); er != nil {
-		deck.ErrorfA("Error posting metric:\n%v", er).With(eventID(cablib.EvtErrMetricReport)).Go()
+	uc, hResult, err := search.FindUpdates(s, criteria, config.WSUSServers, config.EnableThirdParty)
+	if searchHResult != nil {
+		if er := searchHResult.Set(hResult); er != nil {
+			deck.ErrorfA("Error posting metric:\n%v", er).With(eventID(cablib.EvtErrMetricReport)).Go()
+		}
 	}
 	if err != nil {
-		return fmt.Errorf("error encountered when attempting to query for updates: %v", err)
+		return err
 	}
 	defer uc.Close()
 
@@ -300,217 +673,26 @@ func (i *installCmd) installUpdates(ctx context.Context) error {
 	}
 	deck.InfofA("Updates Found:\n%s", strings.Join(uc.Titles(), "\n\n")).With(eventID(cablib.EvtUpdatesFound)).Go()
 
-	installMsgPopped := i.virusDef
-	installingMinOneUpdate := false
-	anyRebootRequired := false
-
 	kbs := NewKBSet(i.kbs)
 	if err := initDriverExclusion(); err != nil {
 		deck.ErrorfA("Error initializing driver exclusions:\n%v", err).With(eventID(cablib.EvtErrDriverExclusion)).Go()
 	}
 	excludes := excludedDrivers.get()
-outerLoop:
+
+	options := UpdateOptions{
+		RequiredCategories: rc,
+		KBSet:              kbs,
+		DriverExcludes:     excludes,
+		DeadlineOnly:       i.deadlineOnly,
+	}
+
+	runner := NewUpdateRunner(ctx, s, i, options)
+
 	for _, u := range uc.Updates {
-		for _, e := range excludes {
-			t := time.Time{}
-			if e.DriverDateVer != "" {
-				t, err = time.Parse("2006-01-02", e.DriverDateVer)
-				if err != nil {
-					deck.WarningfA("Failed to parse driver date version provided in exclusion json: %v", err).With(eventID(cablib.EvtErrDriverExclusion)).Go()
-				}
-			}
-			// Check if at least one driver exclusion exists and matches the update being evaluated.
-			driverFilterExists := e.DriverClass != "" || !t.IsZero()
-			driverClassMatch := e.DriverClass == "" || e.DriverClass == u.DriverClass
-			driverVersionMatch := t.IsZero() || t.Equal(u.DriverVerDate)
-			if driverFilterExists && driverClassMatch && driverVersionMatch {
-				deck.InfofA(
-					"Driver update %q excluded.\nFiltered driver class: %q\nFiltered driver date version: %q",
-					u.Title, e.DriverClass, e.DriverDateVer,
-				).With(eventID(cablib.EvtDriverUpdateExcluded)).Go()
-				continue outerLoop
-			}
-		}
-		if !(u.InCategories(rc)) {
-			deck.InfofA("Skipping update %s.\nRequiredClassifications:\n%v\nUpdate classifications:\n%v",
-				u.Title,
-				rc,
-				u.Categories).With(eventID(cablib.EvtUpdateSkip)).Go()
-			continue
-		}
-
-		if !(u.EulaAccepted) {
-			deck.InfofA("Accepting EULA for update: %s", u.Title).With(eventID(cablib.EvtMisc)).Go()
-			if err := u.AcceptEula(); err != nil {
-				deck.ErrorfA("Failed to accept EULA for update %s:\n%s", u.Title, err).With(eventID(cablib.EvtErrMisc)).Go()
-			}
-		}
-
-		if kbs.Size() > 0 {
-			if !kbs.Search(u.KBArticleIDs) {
-				deck.InfofA("Skipping update %s.\nRequired KBs:\n%s\nUpdate KBs:\n%v",
-					u.Title,
-					kbs,
-					u.KBArticleIDs).With(eventID(cablib.EvtUpdateSkip)).Go()
-				continue
-			}
-		}
-		if i.deadlineOnly {
-			deadline := time.Duration(config.Deadline) * 24 * time.Hour
-			pastDeadline := time.Now().After(u.LastDeploymentChangeTime.Add(deadline))
-			if u.DriverClass != "" {
-				deck.InfofA(
-					"Skipping driver %s with class %s and date version %s.\nDrivers are only installed during a maintenance window at this time.",
-					u.Title,
-					u.DriverClass,
-					u.DriverVerDate).With(eventID(cablib.EvtUpdateSkip)).Go()
-				continue
-			}
-			if !pastDeadline {
-				deck.InfofA(
-					"Skipping update %s.\nUpdate deployed on %v has not reached the %d day threshold.",
-					u.Title,
-					u.LastDeploymentChangeTime,
-					config.Deadline).With(eventID(cablib.EvtUpdateSkip)).Go()
-				continue
-			}
-			deck.InfofA(
-				"Update %s deployed on %v has exceeded the %d day threshold.",
-				u.Title,
-				u.LastDeploymentChangeTime,
-				config.Deadline).With(eventID(cablib.EvtUpdatesFound)).Go()
-		}
-
-		c, err := updatecollection.New()
-		if err != nil {
-			deck.ErrorfA("Failed to create collection: %v", err).With(eventID(cablib.EvtErrMisc)).Go()
-			continue
-		}
-		c.Add(u.Item)
-
-		if !installMsgPopped && !u.InCategories([]string{"Definition Updates"}) {
-			installingMessage()
-			installMsgPopped = true
-			ps := filepath.Join(cablib.CabbiePath, "PreUpdate.ps1")
-			exist, err := helpers.PathExists(ps)
-			if err != nil {
-				deck.ErrorfA("PreUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PreUpdate.ps1", err).With(eventID(cablib.EvtErrUpdateScript)).Go()
-			} else if exist {
-				if _, err := helpers.ExecWithVerify(ps, nil, &config.ScriptTimeout, nil); err != nil {
-					deck.ErrorfA("PreUpdateScript: error running script:\n%v", err).With(eventID(cablib.EvtErrUpdateScript)).Go()
-				}
-			}
-			installingMinOneUpdate = true
-		}
-
-		deck.InfofA("Downloading Update:\n%v", u).With(eventID(cablib.EvtDownload)).Go()
-
-		rc, err := downloadCollection(s, c)
-		if err != nil {
-			deck.ErrorA(err).With(eventID(cablib.EvtErrMisc)).Go()
-			c.Close()
-			continue
-		}
-		if rc == 2 {
-			deck.InfofA("Successfully downloaded update:\n %s", u.Title).With(eventID(cablib.EvtDownload)).Go()
-		} else {
-
-			deck.ErrorfA("Failed to download update:\n %s\n ReturnCode: %d", u.Title, rc).With(eventID(cablib.EvtErrDownloadFailure)).Go()
-			c.Close()
-			continue
-		}
-
-		deck.InfofA("Installing Update:\n%v", u).With(eventID(cablib.EvtInstall)).Go()
-
-		ipu := false
-		if u.InCategories([]string{"Upgrades"}) {
-			ipu = true
-		}
-
-		rsp, err := installCollection(s, c, ipu)
-		if err != nil {
-			deck.ErrorA(err).With(eventID(cablib.EvtErrMisc)).Go()
-			c.Close()
-			continue
-		}
-
-		if err := installHResult.Set(rsp.hResult); err != nil {
-			deck.ErrorfA("Error posting metric:\n%v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
-		}
-		if rsp.resultCode == 2 {
-			deck.InfofA("Successfully installed update:\n%s\nHResult Code: %s", u.Title, rsp.hResult).With(eventID(cablib.EvtInstall)).Go()
-		} else {
-			deck.ErrorfA("Failed to install update:\n%s\nReturnCode: %d\nHResult Code: %s", u.Title, rsp.resultCode, rsp.hResult).With(eventID(cablib.EvtErrInstallFailure)).Go()
-			if code, ok := fetchDetailedUpdateError(ctx, u.Title); ok {
-				deck.WarningfA("Detailed error for update %q from Windows Update Client log: %s", u.Title, code).Go()
-			}
-			c.Close()
-			continue
-		}
-
-		deck.InfofA("Install of KB %s; Reboot Required: %t", u.KBArticleIDs, rsp.rebootRequired).With(eventID(cablib.EvtRebootRequired)).Go()
-
-		if rsp.rebootRequired && !u.InCategories([]string{"Definition Updates"}) {
-			anyRebootRequired = true
-			deck.InfofA("Adding KB %s to reboot list.", u.KBArticleIDs).With(eventID(cablib.EvtRebootRequired)).Go()
-			rebootList = append(rebootList, u.KBArticleIDs...)
-		}
-
-		if rsp.rebootRequired && u.InCategories([]string{"Upgrades"}) {
-			if err := cablib.SetInstallAtShutdown(); err != nil {
-				deck.ErrorfA("Failed to set `InstallAtShutdown` registry value: %v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
-			}
-		}
-
-		c.Close()
+		runner.ProcessSingleUpdate(u)
 	}
 
-	if installingMinOneUpdate {
-		ps := filepath.Join(cablib.CabbiePath, "PostUpdate.ps1")
-		exist, err := helpers.PathExists(ps)
-		if err != nil {
-			deck.ErrorfA("PostUpdateScript: error checking existence of %q:\n%v", cablib.CabbiePath+"PostUpdate.ps1", err).With(eventID(cablib.EvtErrUpdateScript)).Go()
-		} else if exist {
-			if _, err := helpers.ExecWithVerify(ps, nil, &config.ScriptTimeout, nil); err != nil {
-				deck.ErrorfA("PostUpdateScript: error executing script:\n%v", err).With(eventID(cablib.EvtErrUpdateScript)).Go()
-			}
-		}
-	}
-
-	if anyRebootRequired || len(rebootList) > 0 {
-		if len(rebootList) > 0 {
-			if err := cablib.AddRebootUpdates(rebootList); err != nil {
-				deck.ErrorfA("Failed to write updates requiring reboot to registry: %v", err).With(eventID(cablib.EvtRebootRequired)).Go()
-			}
-		}
-
-		// Use active hours if enabled and available, otherwise use the standard reboot delay.
-		now := time.Now()
-		timerEnd := now.Add(time.Second * time.Duration(config.RebootDelay))
-		rebootTime := timerEnd
-		if config.ActiveHoursEnabled == 1 {
-			ah, err := client.Label(int(config.AukeraPort), `active_hours`)
-			if err != nil {
-				deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
-			}
-			if len(ah) != 0 {
-				todayEnd := ah[0].Closes
-				tomorrowEnd := todayEnd.Add(time.Hour * time.Duration(24))
-				// If the active hours end time is in the future, use the end time.
-				// Otherwise, use the same end time of the next day.
-				if todayEnd.After(now) {
-					rebootTime = todayEnd
-				} else {
-					rebootTime = tomorrowEnd
-				}
-			}
-		}
-		rebootMessage(rebootTime)
-		if err := cablib.SetRebootTime(rebootTime); err != nil {
-			deck.ErrorfA("Failed to set reboot time:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
-		}
-		rebootEvent <- true
-	}
+	runner.Finalize()
 
 	return nil
 }

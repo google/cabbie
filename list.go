@@ -24,7 +24,6 @@ import (
 	"flag"
 	"github.com/google/cabbie/cablib"
 	"github.com/google/cabbie/search"
-	"github.com/google/cabbie/session"
 	"github.com/google/deck"
 	"github.com/google/subcommands"
 )
@@ -72,23 +71,10 @@ func listUpdates(hidden bool, ids bool) ([]string, []string, error) {
 		c += " and IsHidden=0"
 	}
 
-	// Start Windows update session
-	s, err := session.New()
+	deck.InfofA("Using search criteria: %s\n", c).With(eventID(cablib.EvtSearch)).Go()
+	uc, _, err := search.FindUpdates(nil, c, config.WSUSServers, config.EnableThirdParty)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create new Windows Update session: %v", err)
-	}
-	defer s.Close()
-
-	q, err := search.NewSearcher(s, c, config.WSUSServers, config.EnableThirdParty)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create a new searcher object: %v", err)
-	}
-	defer q.Close()
-
-	deck.InfofA("Using search criteria: %s\n", q.Criteria).With(eventID(cablib.EvtSearch)).Go()
-	uc, err := q.QueryUpdates()
-	if err != nil {
-		return nil, nil, fmt.Errorf("error encountered when attempting to query for updates: %v", err)
+		return nil, nil, err
 	}
 	defer uc.Close()
 
@@ -112,11 +98,13 @@ func listUpdates(hidden bool, ids bool) ([]string, []string, error) {
 			} else {
 				reqUpdates = append(reqUpdates, u.Title)
 			}
-			if (time.Now().Sub(u.LastDeploymentChangeTime).Hours() / 24) > 31 {
+			if time.Since(u.LastDeploymentChangeTime) > 31*24*time.Hour {
 				devicePatched = false
 			}
 		}
 	}
-	deviceIsPatched.Set(devicePatched)
+	if deviceIsPatched != nil {
+		deviceIsPatched.Set(devicePatched)
+	}
 	return reqUpdates, optUpdates, nil
 }

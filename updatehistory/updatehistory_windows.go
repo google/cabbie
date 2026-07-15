@@ -98,25 +98,33 @@ func (e *Entry) toDateTime(property string) (time.Time, error) {
 func (e *Entry) toIdentity(property string) (updates.Identity, error) {
 	i := updates.Identity{}
 	p, err := oleutil.GetProperty(e.Item, property)
+	if p != nil {
+		defer p.Clear()
+	}
 	if err != nil {
 		return updates.Identity{}, err
 	}
 	pd := p.ToIDispatch()
-	defer pd.Release()
 
 	rn, err := oleutil.GetProperty(pd, "RevisionNumber")
+	if rn != nil {
+		defer rn.Clear()
+	}
 	if err != nil {
 		return updates.Identity{}, err
 	}
-	i.RevisionNumber = int(rn.Value().(int32))
-	_ = rn.Clear()
+	if rn.Value() != nil {
+		i.RevisionNumber = int(rn.Value().(int32))
+	}
 
 	uid, err := oleutil.GetProperty(pd, "UpdateID")
+	if uid != nil {
+		defer uid.Clear()
+	}
 	if err != nil {
 		return updates.Identity{}, err
 	}
 	i.UpdateID = uid.ToString()
-	_ = uid.Clear()
 
 	return i, nil
 }
@@ -124,11 +132,13 @@ func (e *Entry) toIdentity(property string) (updates.Identity, error) {
 func (e *Entry) toCategories() ([]updates.Category, error) {
 	cs := []updates.Category{}
 	cats, err := oleutil.GetProperty(e.Item, "Categories")
+	if cats != nil {
+		defer cats.Clear()
+	}
 	if err != nil {
 		return cs, err
 	}
 	catsd := cats.ToIDispatch()
-	defer catsd.Release()
 
 	count, err := cablib.Count(catsd)
 	if err != nil {
@@ -144,20 +154,20 @@ func (e *Entry) toCategories() ([]updates.Category, error) {
 
 		n, err := oleutil.GetProperty(itemd, "Name")
 		if err != nil {
-			itemd.Release()
+			_ = item.Clear()
 			continue
 		}
 		t, err := oleutil.GetProperty(itemd, "Type")
 		if err != nil {
 			_ = n.Clear()
-			itemd.Release()
+			_ = item.Clear()
 			continue
 		}
 		c, err := oleutil.GetProperty(itemd, "CategoryID")
 		if err != nil {
 			_ = n.Clear()
 			_ = t.Clear()
-			itemd.Release()
+			_ = item.Clear()
 			continue
 		}
 
@@ -165,10 +175,10 @@ func (e *Entry) toCategories() ([]updates.Category, error) {
 			Name:       n.ToString(),
 			Type:       t.ToString(),
 			CategoryID: c.ToString()})
-		itemd.Release()
 		_ = n.Clear()
 		_ = t.Clear()
 		_ = c.Clear()
+		_ = item.Clear()
 	}
 
 	return cs, nil
@@ -222,12 +232,16 @@ func Get(searchInterface *search.Searcher) (*History, error) {
 		uh, err := New(itemd)
 		if err != nil {
 			itemd.Release()
+			_ = item.Clear()
 			h.Close()
 			return nil, fmt.Errorf("errors in update enumeration: %v", err)
 		}
 		// Weed out random invalid entries that show up for some reason.
 		if uh.Operation != 0 {
 			h.Entries = append(h.Entries, uh)
+		} else {
+			uh.Item.Release()
+			uh.Item = nil
 		}
 		_ = item.Clear()
 	}
@@ -237,15 +251,32 @@ func Get(searchInterface *search.Searcher) (*History, error) {
 
 // Count gets the number of updates in an IUpdateHistoryEntryCollection.
 func (hc *History) Count() (int, error) {
+	if hc.IUpdateHistoryEntryCollection == nil {
+		return 0, fmt.Errorf("IUpdateHistoryEntryCollection is nil")
+	}
 	count, err := oleutil.GetProperty(hc.IUpdateHistoryEntryCollection, "Count")
+	if count != nil {
+		defer count.Clear()
+	}
 	if err != nil {
 		return 0, fmt.Errorf("error getting history collection count, %v", err)
 	}
-	defer count.Clear()
 	return int(count.Val), nil
 }
 
 // Close turns down any open update sessions.
 func (hc *History) Close() {
-	hc.IUpdateHistoryEntryCollection.Release()
+	if hc == nil {
+		return
+	}
+	if hc.IUpdateHistoryEntryCollection != nil {
+		hc.IUpdateHistoryEntryCollection.Release()
+		hc.IUpdateHistoryEntryCollection = nil
+	}
+	for _, e := range hc.Entries {
+		if e != nil && e.Item != nil {
+			e.Item.Release()
+			e.Item = nil
+		}
+	}
 }

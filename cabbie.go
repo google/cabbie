@@ -26,6 +26,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -54,25 +55,33 @@ var (
 	config            = new(Settings)
 	categoryDefaults  = []string{"Critical Updates", "Definition Updates", "Security Updates"}
 	rebootEvent       = make(chan bool, 10)
-	rebootActive      = false
+	rebootActive      atomic.Bool
 
 	excludedDrivers driverExcludes
 
 	// Metrics
-	virusUpdateSuccess         = new(metrics.Bool)
-	listUpdateSuccess          = new(metrics.Bool)
-	driverUpdateSuccess        = new(metrics.Bool)
-	updateInstallSuccess       = new(metrics.Bool)
-	rebootRequired             = new(metrics.Bool)
-	deviceIsPatched            = new(metrics.Bool)
-	requiredUpdateCount        = new(metrics.Int)
-	enforcedUpdateCount        = new(metrics.Int)
-	enforcementWatcherFailures = new(metrics.Int)
-	installHResult             = new(metrics.String)
-	searchHResult              = new(metrics.String)
+	virusUpdateSuccess         *metrics.Bool
+	listUpdateSuccess          *metrics.Bool
+	driverUpdateSuccess        *metrics.Bool
+	updateInstallSuccess       *metrics.Bool
+	rebootRequired             *metrics.Bool
+	deviceIsPatched            *metrics.Bool
+	requiredUpdateCount        *metrics.Int
+	enforcedUpdateCount        *metrics.Int
+	enforcementWatcherFailures *metrics.Int
+	installHResult             *metrics.String
+	searchHResult              *metrics.String
 
 	eventID = eventlog.EventID
 )
+
+func isRebootActive() bool {
+	return rebootActive.Load()
+}
+
+func setRebootActive(v bool) {
+	rebootActive.Store(v)
+}
 
 // Settings contains configurable options.
 type Settings struct {
@@ -97,7 +106,7 @@ type tickers struct {
 }
 
 type driverExcludes struct {
-	mutex sync.Mutex
+	mutex sync.RWMutex
 	e     []enforcement.DriverExclude
 }
 
@@ -108,8 +117,8 @@ func (d *driverExcludes) set(v []enforcement.DriverExclude) {
 }
 
 func (d *driverExcludes) get() []enforcement.DriverExclude {
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
+	d.mutex.RLock()
+	defer d.mutex.RUnlock()
 	return d.e
 }
 
@@ -148,6 +157,21 @@ func newSettings() *Settings {
 	}
 }
 
+func readInt(k registry.Key, name string, dest *uint64) {
+	if i, _, err := k.GetIntegerValue(name); err == nil {
+		*dest = i
+	}
+}
+
+func readIntWithDeprecatedFallback(k registry.Key, name, deprecatedName string, dest *uint64) {
+	if i, _, err := k.GetIntegerValue(name); err == nil {
+		*dest = i
+	} else if i, _, err := k.GetIntegerValue(deprecatedName); err == nil {
+		*dest = i
+		deck.WarningfA("Registry setting %q is deprecated and will be removed in a future version. Please use %q instead.", deprecatedName, name).With(eventID(cablib.EvtErrConfig)).Go()
+	}
+}
+
 func (s *Settings) regLoad(path string) error {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, path, registry.QUERY_VALUE)
 	if err != nil {
@@ -162,8 +186,7 @@ func (s *Settings) regLoad(path string) error {
 	if a, _, err := k.GetStringValue("AukeraName"); err == nil {
 		s.AukeraName = a
 	} else {
-		deck.InfofA(
-			"AukeraName not found in registry, using default Name:\n%v", s.AukeraName).With(eventID(cablib.EvtErrConfig)).Go()
+		deck.InfofA("AukeraName not found in registry, using default Name:\n%v", s.AukeraName).With(eventID(cablib.EvtErrConfig)).Go()
 	}
 
 	if m, _, err := k.GetStringsValue("RequiredCategories"); err == nil {
@@ -172,50 +195,20 @@ func (s *Settings) regLoad(path string) error {
 		deck.InfofA("RequiredCategories not found in registry, using default categories:\n%v", s.RequiredCategories).With(eventID(cablib.EvtErrConfig)).Go()
 	}
 
-	if i, _, err := k.GetIntegerValue("EnableThirdParty"); err == nil {
-		s.EnableThirdParty = i
-	}
-	if i, _, err := k.GetIntegerValue("InstallDrivers"); err == nil {
-		s.InstallDrivers = i
-	} else if i, _, err := k.GetIntegerValue("UpdateDrivers"); err == nil {
-		s.InstallDrivers = i
-		deck.WarningfA("Registry setting 'UpdateDrivers' is deprecated and will be removed in a future version. Please use 'InstallDrivers' instead.").With(eventID(cablib.EvtErrConfig)).Go()
-	}
-	if i, _, err := k.GetIntegerValue("InstallVirusDefs"); err == nil {
-		s.InstallVirusDefs = i
-	} else if i, _, err := k.GetIntegerValue("UpdateVirusDef"); err == nil {
-		s.InstallVirusDefs = i
-		deck.WarningfA("Registry setting 'UpdateVirusDef' is deprecated and will be removed in a future version. Please use 'InstallVirusDefs' instead.").With(eventID(cablib.EvtErrConfig)).Go()
-	}
-	if i, _, err := k.GetIntegerValue("RebootDelay"); err == nil {
-		s.RebootDelay = i
-	}
-	if i, _, err := k.GetIntegerValue("Deadline"); err == nil {
-		s.Deadline = i
-	}
-	if i, _, err := k.GetIntegerValue("EnableNotifications"); err == nil {
-		s.EnableNotifications = i
-	} else if i, _, err := k.GetIntegerValue("NotifyAvailable"); err == nil {
-		s.EnableNotifications = i
-		deck.WarningfA("Registry setting 'NotifyAvailable' is deprecated and will be removed in a future version. Please use 'EnableNotifications' instead.").With(eventID(cablib.EvtErrConfig)).Go()
-	}
-	if i, _, err := k.GetIntegerValue("AukeraEnabled"); err == nil {
-		s.AukeraEnabled = i
-	}
-	if i, _, err := k.GetIntegerValue("AukeraPort"); err == nil {
-		s.AukeraPort = i
-	}
-	if i, _, err := k.GetIntegerValue("PprofPort"); err == nil {
-		s.PprofPort = i
-	}
-	if i, _, err := k.GetIntegerValue("ActiveHoursEnabled"); err == nil {
-		s.ActiveHoursEnabled = i
-	}
+	readInt(k, "EnableThirdParty", &s.EnableThirdParty)
+	readIntWithDeprecatedFallback(k, "InstallDrivers", "UpdateDrivers", &s.InstallDrivers)
+	readIntWithDeprecatedFallback(k, "InstallVirusDefs", "UpdateVirusDef", &s.InstallVirusDefs)
+	readInt(k, "RebootDelay", &s.RebootDelay)
+	readInt(k, "Deadline", &s.Deadline)
+	readIntWithDeprecatedFallback(k, "EnableNotifications", "NotifyAvailable", &s.EnableNotifications)
+	readInt(k, "AukeraEnabled", &s.AukeraEnabled)
+	readInt(k, "AukeraPort", &s.AukeraPort)
+	readInt(k, "PprofPort", &s.PprofPort)
+	readInt(k, "ActiveHoursEnabled", &s.ActiveHoursEnabled)
+	readInt(k, "InstallMonthlyPatches", &s.InstallMonthlyPatches)
+
 	if i, _, err := k.GetIntegerValue("ScriptTimeout"); err == nil {
 		s.ScriptTimeout = time.Duration(i) * time.Minute
-	}
-	if i, _, err := k.GetIntegerValue("InstallMonthlyPatches"); err == nil {
-		s.InstallMonthlyPatches = i
 	}
 
 	return nil
@@ -238,59 +231,31 @@ func startService(isDebug bool) error {
 }
 
 func initMetrics() error {
-	var err error
-
-	// bool metrics
-	virusUpdateSuccess, err = metrics.NewBool(cablib.MetricRoot+"virusUpdateSuccess", cablib.MetricSvc)
-	if err != nil {
-		return fmt.Errorf("unable to initialize virusUpdateSuccess metric: %v", err)
-	}
-	listUpdateSuccess, err = metrics.NewBool(cablib.MetricRoot+"listUpdateSuccess", cablib.MetricSvc)
-	if err != nil {
-		return fmt.Errorf("unable to initialize listUpdateSuccess metric: %v", err)
-	}
-	driverUpdateSuccess, err = metrics.NewBool(cablib.MetricRoot+"driverUpdateSuccess", cablib.MetricSvc)
-	if err != nil {
-		return fmt.Errorf("unable to initialize driverUpdateSuccess metric: %v", err)
-	}
-	updateInstallSuccess, err = metrics.NewBool(cablib.MetricRoot+"updateInstallSuccess", cablib.MetricSvc)
-	if err != nil {
-		return fmt.Errorf("unable to initialize updateInstallSuccess metric: %v", err)
-	}
-	rebootRequired, err = metrics.NewBool(cablib.MetricRoot+"rebootRequired", cablib.MetricSvc)
-	if err != nil {
-		return fmt.Errorf("unable to initialize rebootRequired metric: %v", err)
-	}
-	deviceIsPatched, err = metrics.NewBool(cablib.MetricRoot+"deviceIsPatched", cablib.MetricSvc)
-	if err != nil {
-		return fmt.Errorf("unable to initialize deviceIsPatched metric: %v", err)
+	var firstErr error
+	initMetric := func(name string, fn func() error) {
+		if firstErr != nil {
+			return
+		}
+		if err := fn(); err != nil {
+			firstErr = fmt.Errorf("unable to initialize %s metric: %v", name, err)
+		}
 	}
 
-	// integer metrics
-	requiredUpdateCount, err = metrics.NewInt(cablib.MetricRoot+"requiredUpdateCount", cablib.MetricSvc)
-	if err != nil {
-		return fmt.Errorf("unable to initialize requiredUpdateCount metric: %v", err)
-	}
-	enforcedUpdateCount, err = metrics.NewInt(cablib.MetricRoot+"enforcedUpdateCount", cablib.MetricSvc)
-	if err != nil {
-		return fmt.Errorf("unable to initialize enforcedUpdateCount metric: %v", err)
-	}
-	enforcementWatcherFailures, err = metrics.NewCounter(cablib.MetricRoot+"enforcementWatcherFailures", cablib.MetricSvc)
-	if err != nil {
-		return fmt.Errorf("unable to create enforcementWatcherFailures metric: %v", err)
-	}
+	initMetric("virusUpdateSuccess", func() (e error) { virusUpdateSuccess, e = metrics.NewBool(cablib.MetricRoot+"virusUpdateSuccess", cablib.MetricSvc); return })
+	initMetric("listUpdateSuccess", func() (e error) { listUpdateSuccess, e = metrics.NewBool(cablib.MetricRoot+"listUpdateSuccess", cablib.MetricSvc); return })
+	initMetric("driverUpdateSuccess", func() (e error) { driverUpdateSuccess, e = metrics.NewBool(cablib.MetricRoot+"driverUpdateSuccess", cablib.MetricSvc); return })
+	initMetric("updateInstallSuccess", func() (e error) { updateInstallSuccess, e = metrics.NewBool(cablib.MetricRoot+"updateInstallSuccess", cablib.MetricSvc); return })
+	initMetric("rebootRequired", func() (e error) { rebootRequired, e = metrics.NewBool(cablib.MetricRoot+"rebootRequired", cablib.MetricSvc); return })
+	initMetric("deviceIsPatched", func() (e error) { deviceIsPatched, e = metrics.NewBool(cablib.MetricRoot+"deviceIsPatched", cablib.MetricSvc); return })
 
-	// string metrics
-	installHResult, err = metrics.NewString(cablib.MetricRoot+"installHResult", cablib.MetricSvc)
-	if err != nil {
-		return fmt.Errorf("unable to initialize installHResult metric: %v", err)
-	}
-	searchHResult, err = metrics.NewString(cablib.MetricRoot+"searchHResult", cablib.MetricSvc)
-	if err != nil {
-		return fmt.Errorf("unable to initialize searchHResult metric: %v", err)
-	}
+	initMetric("requiredUpdateCount", func() (e error) { requiredUpdateCount, e = metrics.NewInt(cablib.MetricRoot+"requiredUpdateCount", cablib.MetricSvc); return })
+	initMetric("enforcedUpdateCount", func() (e error) { enforcedUpdateCount, e = metrics.NewInt(cablib.MetricRoot+"enforcedUpdateCount", cablib.MetricSvc); return })
+	initMetric("enforcementWatcherFailures", func() (e error) { enforcementWatcherFailures, e = metrics.NewCounter(cablib.MetricRoot+"enforcementWatcherFailures", cablib.MetricSvc); return })
 
-	return nil
+	initMetric("installHResult", func() (e error) { installHResult, e = metrics.NewString(cablib.MetricRoot+"installHResult", cablib.MetricSvc); return })
+	initMetric("searchHResult", func() (e error) { searchHResult, e = metrics.NewString(cablib.MetricRoot+"searchHResult", cablib.MetricSvc); return })
+
+	return firstErr
 }
 
 func setRebootMetric() {
@@ -300,8 +265,10 @@ func setRebootMetric() {
 		return
 	}
 
-	if err := rebootRequired.Set(rbr); err != nil {
-		deck.ErrorA(err).With(eventID(cablib.EvtErrMetricReport)).Go()
+	if rebootRequired != nil {
+		if err := rebootRequired.Set(rbr); err != nil {
+			deck.ErrorA(err).With(eventID(cablib.EvtErrMetricReport)).Go()
+		}
 	}
 
 	if rbr {
@@ -315,8 +282,10 @@ func enforce() error {
 	if err != nil {
 		return fmt.Errorf("error retrieving required updates: %v", err)
 	}
-	if err := enforcedUpdateCount.Set(int64(len(updates.Required))); err != nil {
-		deck.ErrorfA("Error posting metric:\n%v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
+	if enforcedUpdateCount != nil {
+		if err := enforcedUpdateCount.Set(int64(len(updates.Required))); err != nil {
+			deck.ErrorfA("Error posting metric:\n%v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
+		}
 	}
 	var failures error
 	if len(updates.Required) > 0 {
@@ -350,8 +319,173 @@ func initDriverExclusion() error {
 	return nil
 }
 
-func runMainLoop() error {
-	ctx := context.Background()
+func runScheduledInstall(ctx context.Context) {
+	i := installCmd{Interactive: false}
+	err := i.installUpdates(ctx)
+	if err != nil {
+		deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
+	}
+	if updateInstallSuccess != nil {
+		if e := updateInstallSuccess.Set(err == nil); e != nil {
+			deck.ErrorfA("Error posting metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
+		}
+	}
+	setRebootMetric()
+}
+
+func handleDefaultTimer(ctx context.Context) {
+	runScheduledInstall(ctx)
+}
+
+
+func isWindowOpen(maintOpenDay, maintCloseDay int, ahOpens, ahCloses, now time.Time) bool {
+	trimmedOpen := ahOpens.Add(time.Hour)
+	trimmedClose := ahCloses.Add(-time.Hour)
+	today := now.Day()
+	deck.InfofA("Active Hours schedule found:\nNow: %v\nTrimmed Active Hours Open Time: %v\nTrimmed Active Hours Close Time: %v\nToday: %v\nMaintenance Open Day: %v\nMaintenance Close Day: %v\n", now, trimmedOpen, trimmedClose, today, maintOpenDay, maintCloseDay).With(eventID(cablib.EvtMisc)).Go()
+	return trimmedOpen.Before(now) && trimmedClose.After(now) && (today >= maintOpenDay && today <= maintCloseDay)
+}
+
+func handleAukeraTimer(ctx context.Context) {
+	s, err := client.Label(int(config.AukeraPort), config.AukeraName)
+	if err != nil {
+		deck.ErrorfA("Error getting maintenance window %q with error:\n%v", config.AukeraName, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
+		return
+	}
+	if *runInDebug {
+		fmt.Printf("Cabbie maintenance window schedule:\n%+v", s)
+	}
+	if len(s) == 0 {
+		deck.ErrorfA("Aukera maintenance window label %q not found, skipping update check...", config.AukeraName).With(eventID(cablib.EvtErrMaintWindow)).Go()
+		return
+	}
+	if config.ActiveHoursEnabled == 1 {
+		deck.InfofA("Active Hours enabled: checking for active_hours schedule.").With(eventID(cablib.EvtMisc)).Go()
+		ah, err := client.Label(int(config.AukeraPort), `active_hours`)
+		if err != nil {
+			deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
+			return
+		}
+		if len(ah) == 0 {
+			deck.ErrorfA("Aukera maintenance window label %q not found, skipping update check...", `active_hours`).With(eventID(cablib.EvtErrMaintWindow)).Go()
+			return
+		}
+		if isWindowOpen(s[0].Opens.Day(), s[0].Closes.Day(), ah[0].Opens, ah[0].Closes, time.Now()) {
+			deck.InfofA("Active Hours + Maintenance window open: Starting installation process.").With(eventID(cablib.EvtInstall)).Go()
+			runScheduledInstall(ctx)
+		}
+	} else {
+		deck.InfofA("Active Hours disabled: using standard maintenance window schedule.").With(eventID(cablib.EvtMisc)).Go()
+		if s[0].State == "open" {
+			deck.InfofA("Maintenance window open: Starting installation process.").With(eventID(cablib.EvtInstall)).Go()
+			runScheduledInstall(ctx)
+		}
+	}
+}
+
+func handleListTimer(ctx context.Context) {
+	requiredUpdates, optionalUpdates, err := listUpdates(false, false)
+	if listUpdateSuccess != nil {
+		if e := listUpdateSuccess.Set(err == nil); e != nil {
+			deck.ErrorfA("Error posting listUpdateSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
+		}
+	}
+	if err != nil {
+		deck.ErrorfA("Error getting the list of updates:\n%v", err).With(eventID(cablib.EvtErrQueryFailure)).Go()
+		return
+	}
+	if requiredUpdateCount != nil {
+		if err := requiredUpdateCount.Set(int64(len(requiredUpdates))); err != nil {
+			deck.ErrorfA("Error posting requiredUpdateCount metric:\n%v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
+		}
+	}
+
+	if len(requiredUpdates) == 0 {
+		deck.InfoA("No required updates needed to install.").With(eventID(cablib.EvtNoUpdates)).Go()
+		return
+	}
+
+	deck.InfofA("Found %d required updates.\nRequired updates:\n%s\nOptional updates:\n%s",
+		len(requiredUpdates),
+		strings.Join(requiredUpdates, "\n\n"),
+		strings.Join(optionalUpdates, "\n\n"),
+	).With(eventID(cablib.EvtUpdatesFound)).Go()
+
+	if config.EnableNotifications == 1 {
+		if err := notification.NewAvailableUpdateMessage().Push(ctx); err != nil {
+			deck.ErrorfA("Failed to create notification:\n%v", err).With(eventID(cablib.EvtErrNotifications)).Go()
+		}
+	}
+
+	if config.Deadline != 0 {
+		i := installCmd{Interactive: false, deadlineOnly: true}
+		if err := i.installUpdates(ctx); err != nil {
+			deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
+		}
+	}
+}
+
+func handleVirusTimer(ctx context.Context) {
+	i := installCmd{Interactive: false, virusDef: true}
+	err := i.installUpdates(ctx)
+	if virusUpdateSuccess != nil {
+		if e := virusUpdateSuccess.Set(err == nil); e != nil {
+			deck.ErrorfA("Error posting virusUpdateSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
+		}
+	}
+	if err != nil {
+		deck.ErrorfA("Error installing virus definitions:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
+	}
+}
+
+func handleDriverTimer(ctx context.Context) {
+	i := installCmd{Interactive: false, drivers: true}
+	err := i.installUpdates(ctx)
+	if driverUpdateSuccess != nil {
+		if e := driverUpdateSuccess.Set(err == nil); e != nil {
+			deck.ErrorfA("Error posting driverUpdateSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
+		}
+	}
+	if err != nil {
+		deck.ErrorfA("Error installing drivers:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
+	}
+	setRebootMetric()
+}
+
+func handleEnforcementTimer() {
+	if err := enforce(); err != nil {
+		deck.ErrorfA("Error enforcing one or more updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
+	}
+}
+
+func handleEnforcementTrigger(file string) {
+	deck.InfofA("Enforcement triggered by change in file %q.", file).With(eventID(cablib.EvtEnforcementChange)).Go()
+	handleEnforcementTimer()
+}
+
+func handleRebootTrigger() {
+	go func() {
+		if rebootActive.CompareAndSwap(false, true) {
+			defer rebootActive.Store(false)
+			deck.InfoA("Reboot initiated...").With(eventID(cablib.EvtReboot)).Go()
+			t, err := cablib.RebootTime()
+			if err != nil {
+				deck.ErrorfA("Error getting reboot time: %v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
+				return
+			}
+			if t.IsZero() {
+				deck.InfoA("Zero time returned, no reboot defined.").With(eventID(cablib.EvtMisc)).Go()
+				return
+			}
+			deck.InfofA("Reboot time is %s", t.String()).With(eventID(cablib.EvtMisc)).Go()
+			if err := cablib.SystemReboot(context.Background(), t); err != nil {
+				deck.ErrorfA("SystemReboot() error:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
+			}
+		}
+	}()
+}
+
+func runMainLoop(ctx context.Context) error {
 	if err := notification.CleanNotifications(cablib.SvcName); err != nil {
 		deck.ErrorfA("Error clearing old notifications:\n%v", err).With(eventID(cablib.EvtErrNotifications)).Go()
 	}
@@ -368,17 +502,46 @@ func runMainLoop() error {
 	t := initTickers()
 	defer t.stop()
 
+	// If a profiling port is specified, start an HTTP server with graceful shutdown on context cancellation.
+	if config.PprofPort != 0 {
+		srv := &http.Server{Addr: fmt.Sprintf("localhost:%d", config.PprofPort)}
+		go func() {
+			<-ctx.Done()
+			srv.Shutdown(context.Background())
+		}()
+		go func() {
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				deck.ErrorfA("pprof server error: %v", err).With(eventID(cablib.EvtErrMisc)).Go()
+			}
+		}()
+	}
+
 	// Run filesystem watcher for required updates configuration.
 	enforcedFile := make(chan string)
 	go func() {
 		for {
-			if err := enforcement.Watcher(enforcedFile); err == nil {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			err := enforcement.Watcher(ctx, enforcedFile)
+			if ctx.Err() != nil {
+				return
+			}
+			if err == nil {
 				deck.ErrorfA("failed to initialize enforcement config watcher; relying on default enforcement schedule: %v", err).With(eventID(cablib.EvtErrEnforcement)).Go()
 			}
-			if err := enforcementWatcherFailures.Increment(); err != nil {
-				deck.ErrorfA("unable to increment enforcementWatcherFailures metric: %v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
+			if enforcementWatcherFailures != nil {
+				if err := enforcementWatcherFailures.Increment(); err != nil {
+					deck.ErrorfA("unable to increment enforcementWatcherFailures metric: %v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
+				}
 			}
-			time.Sleep(15 * time.Minute)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(15 * time.Minute):
+			}
 		}
 	}()
 
@@ -400,165 +563,25 @@ func runMainLoop() error {
 
 	for {
 		select {
+		case <-ctx.Done():
+			deck.InfoA("Main loop stopping due to context cancellation.").With(eventID(cablib.EvtMisc)).Go()
+			return ctx.Err()
 		case <-t.Default.C:
-			i := installCmd{Interactive: false}
-			err := i.installUpdates(ctx)
-			if err != nil {
-				deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
-			}
-			if e := updateInstallSuccess.Set(err == nil); e != nil {
-				deck.ErrorfA("Error posting metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
-			}
-			setRebootMetric()
+			handleDefaultTimer(ctx)
 		case <-t.Aukera.C:
-			s, err := client.Label(int(config.AukeraPort), config.AukeraName)
-			if err != nil {
-				deck.ErrorfA("Error getting maintenance window %q with error:\n%v", config.AukeraName, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
-				break
-			}
-			if *runInDebug {
-				fmt.Printf("Cabbie maintenance window schedule:\n%+v", s)
-			}
-			if len(s) == 0 {
-				deck.ErrorfA("Aukera maintenance window label %q not found, skipping update check...", config.AukeraName).With(eventID(cablib.EvtErrMaintWindow)).Go()
-				break
-			}
-			if config.ActiveHoursEnabled == 1 {
-				deck.InfofA("Active Hours enabled: checking for active_hours schedule.").With(eventID(cablib.EvtMisc)).Go()
-				ah, err := client.Label(int(config.AukeraPort), `active_hours`)
-				if err != nil {
-					deck.ErrorfA("Error getting maintenance window %q with error:\n%v", `active_hours`, err).With(eventID(cablib.EvtErrMaintWindow)).Go()
-					break
-				}
-				if len(ah) == 0 {
-					deck.ErrorfA("Aukera maintenance window label %q not found, skipping update check...", `active_hours`).With(eventID(cablib.EvtErrMaintWindow)).Go()
-					break
-				}
-				trimmedOpen := ah[0].Opens.Add(time.Hour)
-				trimmedClose := ah[0].Closes.Add(-time.Hour)
-				now := time.Now()
-				today := time.Now().Day()
-				maintOpenDay := s[0].Opens.Day()
-				maintCloseDay := s[0].Closes.Day()
-				deck.InfofA("Active Hours schedule found:\nNow: %v\nTrimmed Active Hours Open Time: %v\nTrimmed Active Hours Close Time: %v\nToday: %v\nMaintenance Open Day: %v\nMaintenance Close Day: %v\n", now, trimmedOpen, trimmedClose, today, maintOpenDay, maintCloseDay).With(eventID(cablib.EvtMisc)).Go()
-				// We're trimming the leading and trailing hours from the active hours window.
-				// As long as the current time is within the trimmed window and the current day is
-				// within the standard `cabbie` maintenance window, we'll install updates.
-				if trimmedOpen.Before(now) && trimmedClose.After(now) && ((today >= maintOpenDay) && (today <= maintCloseDay)) {
-					deck.InfofA("Active Hours + Maintenance window open: Starting installation process.").With(eventID(cablib.EvtInstall)).Go()
-					i := installCmd{Interactive: false}
-					err := i.installUpdates(ctx)
-					if err != nil {
-						deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
-					}
-					if e := updateInstallSuccess.Set(err == nil); e != nil {
-						deck.ErrorfA("Error posting updateInstallSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
-					}
-					setRebootMetric()
-				}
-			} else {
-				deck.InfofA("Active Hours disabled: using standard maintenance window schedule.").With(eventID(cablib.EvtMisc)).Go()
-				// If we're a server, or we don't have an active hours window, we'll install updates
-				// as long as the standard `cabbie` maintenance window is open.
-				if s[0].State == "open" {
-					deck.InfofA("Maintenance window open: Starting installation process.").With(eventID(cablib.EvtInstall)).Go()
-					i := installCmd{Interactive: false}
-					err := i.installUpdates(ctx)
-					if err != nil {
-						deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
-					}
-					if e := updateInstallSuccess.Set(err == nil); e != nil {
-						deck.ErrorfA("Error posting updateInstallSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
-					}
-					setRebootMetric()
-				}
-			}
+			handleAukeraTimer(ctx)
 		case <-t.List.C:
-			requiredUpdates, optionalUpdates, err := listUpdates(false, false)
-			if e := listUpdateSuccess.Set(err == nil); e != nil {
-				deck.ErrorfA("Error posting listUpdateSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
-			}
-			if err != nil {
-				deck.ErrorfA("Error getting the list of updates:\n%v", err).With(eventID(cablib.EvtErrQueryFailure)).Go()
-				break
-			}
-			if err := requiredUpdateCount.Set(int64(len(requiredUpdates))); err != nil {
-				deck.ErrorfA("Error posting requiredUpdateCount metric:\n%v", err).With(eventID(cablib.EvtErrMetricReport)).Go()
-			}
-
-			if len(requiredUpdates) == 0 {
-				deck.InfoA("No required updates needed to install.").With(eventID(cablib.EvtNoUpdates)).Go()
-				break
-			}
-
-			deck.InfofA("Found %d required updates.\nRequired updates:\n%s\nOptional updates:\n%s",
-				len(requiredUpdates),
-				strings.Join(requiredUpdates, "\n\n"),
-				strings.Join(optionalUpdates, "\n\n"),
-			).With(eventID(cablib.EvtUpdatesFound)).Go()
-
-			if config.EnableNotifications == 1 {
-				if err := notification.NewAvailableUpdateMessage().Push(); err != nil {
-					deck.ErrorfA("Failed to create notification:\n%v", err).With(eventID(cablib.EvtErrNotifications)).Go()
-				}
-			}
-
-			if config.Deadline != 0 {
-				i := installCmd{Interactive: false, deadlineOnly: true}
-				if err := i.installUpdates(ctx); err != nil {
-					deck.ErrorfA("Error installing system updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
-				}
-			}
+			handleListTimer(ctx)
 		case <-t.Virus.C:
-			i := installCmd{Interactive: false, virusDef: true}
-			err := i.installUpdates(ctx)
-			if e := virusUpdateSuccess.Set(err == nil); e != nil {
-				deck.ErrorfA("Error posting virusUpdateSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
-			}
-			if err != nil {
-				deck.ErrorfA("Error installing virus definitions:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
-				break
-			}
+			handleVirusTimer(ctx)
 		case <-t.Driver.C:
-			i := installCmd{Interactive: false, drivers: true}
-			err := i.installUpdates(ctx)
-			if e := driverUpdateSuccess.Set(err == nil); e != nil {
-				deck.ErrorfA("Error posting driverUpdateSuccess metric:\n%v", e).With(eventID(cablib.EvtErrMetricReport)).Go()
-			}
-			if err != nil {
-				deck.ErrorfA("Error installing drivers:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
-			}
-			setRebootMetric()
+			handleDriverTimer(ctx)
 		case file := <-enforcedFile:
-			deck.InfofA("Enforcement triggered by change in file %q.", file).With(eventID(cablib.EvtEnforcementChange)).Go()
-			if err := enforce(); err != nil {
-				deck.ErrorfA("Error enforcing one or more updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
-			}
+			handleEnforcementTrigger(file)
 		case <-t.Enforcement.C:
-			if err := enforce(); err != nil {
-				deck.ErrorfA("Error enforcing one or more updates:\n%v", err).With(eventID(cablib.EvtErrInstallFailure)).Go()
-			}
+			handleEnforcementTimer()
 		case <-rebootEvent:
-			go func() {
-				if !(rebootActive) {
-					rebootActive = true
-					deck.InfoA("Reboot initiated...").With(eventID(cablib.EvtReboot)).Go()
-					t, err := cablib.RebootTime()
-					if err != nil {
-						deck.ErrorfA("Error getting reboot time: %v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
-						return
-					}
-					if t.IsZero() {
-						deck.InfoA("Zero time returned, no reboot defined.").With(eventID(cablib.EvtMisc)).Go()
-						return
-					}
-					deck.InfofA("Reboot time is %s", t.String()).With(eventID(cablib.EvtMisc)).Go()
-					if err := cablib.SystemReboot(t); err != nil {
-						deck.ErrorfA("SystemReboot() error:\n%v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
-					}
-					rebootActive = false
-				}
-			}()
+			handleRebootTrigger()
 		}
 	}
 }
@@ -568,10 +591,12 @@ func (m winSvc) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<
 
 	const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown
 	errch := make(chan error)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	changes <- svc.Status{State: svc.StartPending}
 	go func() {
-		errch <- runMainLoop()
+		errch <- runMainLoop(ctx)
 	}()
 	deck.InfoA("Service started.").With(eventID(cablib.EvtServiceStarted)).Go()
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
@@ -581,7 +606,9 @@ loop:
 		select {
 		// Watch for the cabbie goroutine to fail for some reason.
 		case err := <-errch:
-			deck.ErrorfA("Cabbie goroutine has failed: %v", err).With(eventID(cablib.EvtErrService)).Go()
+			if err != nil && err != context.Canceled {
+				deck.ErrorfA("Cabbie goroutine has failed: %v", err).With(eventID(cablib.EvtErrService)).Go()
+			}
 			break loop
 		// Watch for service signals.
 		case c := <-r:
@@ -589,6 +616,7 @@ loop:
 			case svc.Interrogate:
 				changes <- c.CurrentStatus
 			case svc.Stop, svc.Shutdown:
+				cancel()
 				break loop
 			default:
 				deck.ErrorfA("Unexpected control request #%d", c).With(eventID(cablib.EvtErrService)).Go()
@@ -652,7 +680,7 @@ func main() {
 
 	// Load Cabbie config settings.
 	config = newSettings()
-	if err = config.regLoad(cablib.RegPath); err != nil {
+	if err = config.regLoad(cablib.RegPath()); err != nil {
 		deck.ErrorfA("Failed to load Cabbie config, using defaults:\n%v\nError:%v", config, err).With(eventID(cablib.EvtErrConfig)).Go()
 	}
 
