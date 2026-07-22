@@ -93,8 +93,8 @@ func (c rebootCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) sub
 		pending, err := cablib.RebootRequired()
 		if err != nil {
 			msg := fmt.Sprintf("Failed to get reboot pending status: %v", err)
-			deck.ErrorfA(msg).With(eventID(cablib.EvtMisc)).Go()
-			fmt.Printf(msg)
+			deck.ErrorfA("%s", msg).With(eventID(cablib.EvtMisc)).Go()
+			fmt.Printf("%s", msg)
 			return subcommands.ExitFailure
 		}
 		if !pending {
@@ -106,8 +106,8 @@ func (c rebootCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) sub
 		rebootTime, err := cablib.RebootTime()
 		if err != nil {
 			msg := fmt.Sprintf("A reboot is pending, but failed to get reboot time: %v", err)
-			deck.ErrorfA(msg).With(eventID(cablib.EvtMisc)).Go()
-			fmt.Printf(msg)
+			deck.ErrorfA("%s", msg).With(eventID(cablib.EvtMisc)).Go()
+			fmt.Printf("%s", msg)
 			return subcommands.ExitFailure
 		}
 		msg := fmt.Sprintf("A reboot is pending at %s.\n", rebootTime.String())
