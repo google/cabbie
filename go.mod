@@ -6,7 +6,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0
 	github.com/google/aukera v1.0.2
 	github.com/google/deck v1.1.0
-	github.com/google/glazier v0.0.0-20260708194511-ab577007a521
+	github.com/google/glazier v0.0.0-20260722191826-dfc35fb46599
 	github.com/google/go-cmp v0.7.0
 	github.com/google/subcommands v1.2.0
 	github.com/scjalliance/comshim v0.0.0-20251021001035-b69f3cdad6f3
