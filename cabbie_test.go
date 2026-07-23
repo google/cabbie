@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	testPath = `SOFTWARE\Bar`
+	testPath = `SOFTWARE\Cabbie_MainTest`
 )
 
 func createTestKeys() error {
@@ -39,6 +39,7 @@ func cleanupTestKey() error {
 
 func TestRegLoadKeyMissing(t *testing.T) {
 	// Setup
+	cleanupTestKey()
 	expected := newSettings()
 	testconfig := newSettings()
 	// End Setup

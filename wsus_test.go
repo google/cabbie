@@ -24,7 +24,7 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-const testRegPath = `SOFTWARE\Cabbie_test`
+const testRegPath = `SOFTWARE\Cabbie_WsusTest`
 
 type mockConn struct {
 	net.Conn

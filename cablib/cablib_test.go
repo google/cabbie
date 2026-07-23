@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	testPath = `SOFTWARE\Bar`
+	testPath = `SOFTWARE\Cabbie_CablibTest`
 )
 
 var (
