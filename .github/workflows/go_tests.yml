@@ -14,6 +14,8 @@
 
 name: Go Tests
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   go_tests:
     runs-on: windows-latest
