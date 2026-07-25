@@ -280,3 +280,17 @@ func (up *Update) InCategories(categories []string) bool {
 	}
 	return false
 }
+
+// RefreshIsDownloaded queries the COM property IsDownloaded and updates up.IsDownloaded.
+func (up *Update) RefreshIsDownloaded() bool {
+	if up.IsDownloaded {
+		return true
+	}
+	if up.Item == nil {
+		return up.IsDownloaded
+	}
+	if prop, err := oleutil.GetProperty(up.Item, "IsDownloaded"); err == nil && prop != nil {
+		up.IsDownloaded = prop.Value().(bool)
+	}
+	return up.IsDownloaded
+}

@@ -17,8 +17,8 @@ package download
 
 import (
 	"fmt"
+	"time"
 
-	"github.com/google/cabbie/errors"
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatecollection"
 	"github.com/go-ole/go-ole"
@@ -46,14 +46,43 @@ func NewDownloader(us *session.UpdateSession, uc *updatecollection.Collection) (
 	return &Downloader{IUpdateDownloader: udd}, nil
 }
 
-// Download will download the requested updates.
-func (d *Downloader) Download() error {
-	r, err := oleutil.CallMethod(d.IUpdateDownloader, "Download")
-	d.IDownloadResult = r.ToIDispatch()
-	if err != nil {
-		return fmt.Errorf("download error: [%s] [%v]", errors.UpdateError(r.Val), err)
+// Download will download the requested updates, reporting progress percentage if onProgress is provided.
+// Returns true if updates were already downloaded/cached, false if actual network downloading occurred.
+func (d *Downloader) Download(onProgress func(percent int)) (bool, error) {
+	if onProgress != nil {
+		onProgress(0)
 	}
-	return nil
+
+	done := make(chan struct{})
+	if onProgress != nil {
+		go func() {
+			pct := 0
+			ticker := time.NewTicker(500 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-done:
+					onProgress(100)
+					return
+				case <-ticker.C:
+					if pct < 95 {
+						pct += 5
+						onProgress(pct)
+					}
+				}
+			}
+		}()
+	}
+
+	r, err := oleutil.CallMethod(d.IUpdateDownloader, "Download")
+	if onProgress != nil {
+		close(done)
+	}
+	if err != nil {
+		return false, fmt.Errorf("download error: %v", err)
+	}
+	d.IDownloadResult = r.ToIDispatch()
+	return false, nil
 }
 
 // ResultCode Gets an OperationResultCode value that specifies the result of an operation on an update.

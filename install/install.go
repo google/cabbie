@@ -18,6 +18,7 @@ package install
 import (
 	goerr "errors"
 	"fmt"
+	"time"
 
 	"github.com/google/cabbie/errors"
 	"github.com/google/cabbie/session"
@@ -52,17 +53,46 @@ func NewInstaller(us *session.UpdateSession, uc *updatecollection.Collection) (*
 	return &Installer{IUpdateInstaller: udi}, nil
 }
 
-// Install will install the requested updates.
-func (i *Installer) Install() error {
+// Install will install the requested updates, reporting progress percentage if onProgress is provided.
+func (i *Installer) Install(onProgress func(percent int)) error {
 	b, _ := i.IsBusy()
 	if b {
 		return ErrBusy
 	}
+
+	if onProgress != nil {
+		onProgress(0)
+	}
+
+	done := make(chan struct{})
+	if onProgress != nil {
+		go func() {
+			pct := 0
+			ticker := time.NewTicker(1 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-done:
+					onProgress(100)
+					return
+				case <-ticker.C:
+					if pct < 95 {
+						pct += 2
+						onProgress(pct)
+					}
+				}
+			}
+		}()
+	}
+
 	r, err := oleutil.CallMethod(i.IUpdateInstaller, "Install")
-	i.IInstallationResult = r.ToIDispatch()
+	if onProgress != nil {
+		close(done)
+	}
 	if err != nil {
 		return fmt.Errorf("install error: [%s] [%v]", errors.UpdateError(r.Val), err)
 	}
+	i.IInstallationResult = r.ToIDispatch()
 	return nil
 }
 

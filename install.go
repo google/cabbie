@@ -32,6 +32,7 @@ import (
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatecollection"
+	"github.com/google/cabbie/updates"
 	"github.com/google/deck"
 	"github.com/google/aukera/client"
 	"github.com/google/subcommands"
@@ -153,18 +154,77 @@ func rebootMessage(t time.Time) {
 	}
 }
 
-func downloadCollection(s *session.UpdateSession, c *updatecollection.Collection) (int, error) {
+type progressBar struct {
+	start     time.Time
+	lastPrint time.Time
+}
+
+func newProgressBar(title string) *progressBar {
+	fmt.Fprintf(os.Stderr, "%s\n", title)
+	return &progressBar{start: time.Now()}
+}
+
+func (p *progressBar) Set(percent int) error {
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	now := time.Now()
+	if percent < 100 && now.Sub(p.lastPrint) < 100*time.Millisecond {
+		return nil
+	}
+	p.lastPrint = now
+
+	completed := (percent * 35) / 100
+	bar := strings.Repeat("█", completed) + strings.Repeat(" ", 35-completed)
+	fmt.Fprintf(os.Stderr, "\r|%s| %3d%% [%s]", bar, percent, now.Sub(p.start).Round(time.Second))
+	return nil
+}
+
+func (p *progressBar) Finish() error {
+	_ = p.Set(100)
+	fmt.Fprint(os.Stderr, "\n")
+	return nil
+}
+
+func (p *progressBar) Exit() error {
+	fmt.Fprint(os.Stderr, "\n")
+	return nil
+}
+
+func downloadCollection(s *session.UpdateSession, c *updatecollection.Collection, u *updates.Update) (int, bool, error) {
 	d, err := download.NewDownloader(s, c)
 	if err != nil {
-		return 0, fmt.Errorf("error creating downloader:\n %v", err)
+		return 0, false, fmt.Errorf("error creating downloader:\n %v", err)
 	}
 	defer d.Close()
 
-	if err := d.Download(); err != nil {
-		return 0, fmt.Errorf("error downloading updates:\n %v", err)
+	if u.RefreshIsDownloaded() {
+		return 2, true, nil
 	}
 
-	return d.ResultCode()
+	var bar *progressBar
+	cached, err := d.Download(func(percent int) {
+		if bar == nil {
+			deck.InfofA("Downloading Update:\n%v", u).With(eventID(cablib.EvtDownload)).Go()
+			bar = newProgressBar(fmt.Sprintf("Downloading %s", u.Title))
+		}
+		_ = bar.Set(percent)
+	})
+	if err != nil {
+		if bar != nil {
+			_ = bar.Exit()
+		}
+		return 0, false, fmt.Errorf("error downloading updates:\n %v", err)
+	}
+	if bar != nil {
+		_ = bar.Finish()
+	}
+
+	rc, err := d.ResultCode()
+	return rc, cached, err
 }
 
 // fetchDetailedUpdateError queries the Windows Event Log for recent update installation
@@ -195,15 +255,29 @@ func fetchDetailedUpdateError(ctx context.Context, title string) (string, bool) 
 	return code, true
 }
 
-func installCollection(s *session.UpdateSession, c *updatecollection.Collection, ipu bool) (*installRsp, error) {
+func installCollection(s *session.UpdateSession, c *updatecollection.Collection, u *updates.Update, ipu bool) (*installRsp, error) {
 	inst, err := install.NewInstaller(s, c)
 	if err != nil {
 		return nil, fmt.Errorf("error creating installer: \n %v", err)
 	}
 	defer inst.Close()
 
-	if err := inst.Install(); err != nil {
+	var bar *progressBar
+	err = inst.Install(func(percent int) {
+		if bar == nil {
+			deck.InfofA("Installing Update:\n%v", u).With(eventID(cablib.EvtInstall)).Go()
+			bar = newProgressBar(fmt.Sprintf("Installing %s", u.Title))
+		}
+		_ = bar.Set(percent)
+	})
+	if err != nil {
+		if bar != nil {
+			_ = bar.Exit()
+		}
 		return nil, fmt.Errorf("error installing updates:\n %v", err)
+	}
+	if bar != nil {
+		_ = bar.Finish()
 	}
 
 	rc, err := inst.ResultCode()
@@ -403,15 +477,15 @@ outerLoop:
 			installingMinOneUpdate = true
 		}
 
-		deck.InfofA("Downloading Update:\n%v", u).With(eventID(cablib.EvtDownload)).Go()
-
-		rc, err := downloadCollection(s, c)
+		rc, cached, err := downloadCollection(s, c, u)
 		if err != nil {
 			deck.ErrorA(err).With(eventID(cablib.EvtErrMisc)).Go()
 			c.Close()
 			continue
 		}
-		if rc == 2 {
+		if cached {
+			deck.InfofA("Update already downloaded (cached):\n%v", u).With(eventID(cablib.EvtDownload)).Go()
+		} else if rc == 2 {
 			deck.InfofA("Successfully downloaded update:\n %s", u.Title).With(eventID(cablib.EvtDownload)).Go()
 		} else {
 
@@ -420,14 +494,12 @@ outerLoop:
 			continue
 		}
 
-		deck.InfofA("Installing Update:\n%v", u).With(eventID(cablib.EvtInstall)).Go()
-
 		ipu := false
 		if u.InCategories([]string{"Upgrades"}) {
 			ipu = true
 		}
 
-		rsp, err := installCollection(s, c, ipu)
+		rsp, err := installCollection(s, c, u, ipu)
 		if err != nil {
 			deck.ErrorA(err).With(eventID(cablib.EvtErrMisc)).Go()
 			c.Close()
