@@ -37,6 +37,7 @@ import (
 	"github.com/google/aukera/client"
 	"github.com/google/subcommands"
 	"github.com/google/glazier/go/helpers"
+	"golang.org/x/sys/windows"
 )
 
 // Available flags
@@ -72,7 +73,26 @@ var (
 	errInvalidFlags = errors.New("invalid flag combination")
 	rebootList      = []string{}
 	rebootTime      time.Time
+
+	// Progress bar characters
+	progChar      = "="
+	progEmptyChar = "-"
 )
+
+func init() {
+	// Detect if we can safely render rich UTF-8
+	isWindowsTerminal := os.Getenv("WT_SESSION") != ""
+	isUTF8CodePage := false
+	if cp, err := windows.GetConsoleOutputCP(); err == nil && cp == 65001 {
+		isUTF8CodePage = true
+	}
+
+	if isWindowsTerminal || isUTF8CodePage {
+		// Use the modern blocking characters
+		progChar = "█"
+		progEmptyChar = " "
+	}
+}
 
 func vetFlags(i installCmd) error {
 	f := 0
@@ -178,7 +198,7 @@ func (p *progressBar) Set(percent int) error {
 	p.lastPrint = now
 
 	completed := (percent * 35) / 100
-	bar := strings.Repeat("█", completed) + strings.Repeat(" ", 35-completed)
+	bar := strings.Repeat(progChar, completed) + strings.Repeat(progEmptyChar, 35-completed)
 	fmt.Fprintf(os.Stderr, "\r|%s| %3d%% [%s]", bar, percent, now.Sub(p.start).Round(time.Second))
 	return nil
 }
