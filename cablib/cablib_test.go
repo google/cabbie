@@ -32,6 +32,9 @@ var (
 	fakeTimeNow = func() time.Time {
 		return time.Date(2009, 11, 17, 20, 34, 58, 651387237, time.UTC)
 	}
+	fakeDurationSinceBoot = func() time.Duration {
+		return 5 * time.Minute
+	}
 	testRebootTrue  = func() (bool, error) { return true, nil }
 	testRebootFalse = func() (bool, error) { return false, nil }
 )
@@ -199,6 +202,7 @@ func TestRebootTimeNoReboot(t *testing.T) {
 func TestRebootTimeSuccess(t *testing.T) {
 	// Setup
 	now = fakeTimeNow
+	durationSinceBoot = fakeDurationSinceBoot
 	RegPath = testPath
 	rebootRequired = testRebootTrue
 	if err := createTestKeys(); err != nil {
@@ -226,6 +230,57 @@ func TestRebootTimeSuccess(t *testing.T) {
 	}
 }
 
+func TestRebootTimePredatesBoot(t *testing.T) {
+	now = fakeTimeNow
+	durationSinceBoot = func() time.Duration { return 1 * time.Hour }
+	RegPath = testPath
+	rebootRequired = testRebootTrue
+	if err := createTestKeys(); err != nil {
+		t.Fatal(err)
+	}
+	defer cleanupTestKey()
+
+	// Scheduled reboot was 2 hours ago (predates boot time of 1 hour ago).
+	rebootTime := now().Add(-2 * time.Hour)
+	if err := setBinarykey(rebootTime); err != nil {
+		t.Fatal(err)
+	}
+
+	tt, err := RebootTime()
+	if err != nil {
+		t.Error(err)
+	}
+	if !tt.IsZero() {
+		t.Errorf("RebootTime() = %s, wanted zero time for reboot predating boot", tt)
+	}
+
+	_, err = getBinarykey(rebootValue)
+	if err != registry.ErrNotExist {
+		t.Errorf("Registry value %q still found, expected missing", rebootValue)
+	}
+}
+
+func TestClearRebootTime(t *testing.T) {
+	RegPath = testPath
+	if err := createTestKeys(); err != nil {
+		t.Fatal(err)
+	}
+	defer cleanupTestKey()
+
+	if err := setBinarykey(fakeTimeNow()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ClearRebootTime(); err != nil {
+		t.Fatalf("ClearRebootTime() failed: %v", err)
+	}
+
+	_, err := getBinarykey(rebootValue)
+	if err != registry.ErrNotExist {
+		t.Errorf("Registry value %q still found, expected missing", rebootValue)
+	}
+}
+
 func TestStringInSlice(t *testing.T) {
 	for _, tt := range []struct {
 		sl  []string
@@ -250,8 +305,8 @@ func TestStringInSlice(t *testing.T) {
 
 func TestSliceContains(t *testing.T) {
 	for _, tt := range []struct {
-		sl  interface{}
-		st  interface{}
+		sl  any
+		st  any
 		out bool
 	}{
 		{[]string{"abc"}, "abc", true},

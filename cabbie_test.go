@@ -16,7 +16,9 @@ package main
 
 import (
 	"testing"
+	"time"
 
+	"github.com/google/cabbie/cablib"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sys/windows/registry"
 )
@@ -93,5 +95,36 @@ func TestRegLoadRequiredCategories(t *testing.T) {
 	}
 	if !(cmp.Equal(testconfig, expected)) {
 		t.Errorf("testconfig.regLoad(%s) = %v, want %v", testPath, testconfig, expected)
+	}
+}
+
+func TestSetRebootMetricClearsStaleRebootTime(t *testing.T) {
+	origRegPath := cablib.RegPath
+	origRebootRequired := cablib.RebootRequired
+	defer func() {
+		cablib.RegPath = origRegPath
+		cablib.RebootRequired = origRebootRequired
+	}()
+
+	cablib.RegPath = testPath
+	cablib.RebootRequired = func() (bool, error) { return false, nil }
+
+	if err := createTestKeys(); err != nil {
+		t.Fatal(err)
+	}
+	defer cleanupTestKey()
+
+	if err := cablib.SetRebootTime(time.Now().Add(2 * time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	setRebootMetric()
+
+	rt, err := cablib.RebootTime()
+	if err != nil {
+		t.Errorf("cablib.RebootTime() error = %v", err)
+	}
+	if !rt.IsZero() {
+		t.Errorf("cablib.RebootTime() = %v, want zero time after setRebootMetric with RebootRequired=false", rt)
 	}
 }

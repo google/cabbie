@@ -23,13 +23,17 @@ import (
 
 	"github.com/google/cabbie/notification"
 	"golang.org/x/sys/windows/registry"
+	"golang.org/x/sys/windows"
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 	"github.com/google/glazier/go/power"
 )
 
 var (
-	rebootRequired = RebootRequired
+	// RebootRequired indicates whether a system restart is required.
+	RebootRequired    = rebootRequiredImpl
+	rebootRequired    = RebootRequired
+	durationSinceBoot = windows.DurationSinceBoot
 
 	// IIDIWindowsDriverUpdate is the GUID for the IWindowsDriverUpdate COM interface.
 	// See: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-uamg/e839e7e0-1795-451b-94ef-abacd6cbecac
@@ -144,6 +148,16 @@ func RebootTime() (time.Time, error) {
 		return t, fmt.Errorf("unable to Unmarshal binary data: %v", err)
 	}
 
+	if t.IsZero() {
+		return t, nil
+	}
+
+	// Remove timer if the scheduled reboot time predates the current system boot.
+	bootTime := now().Add(-durationSinceBoot())
+	if bootTime.After(t) {
+		return time.Time{}, k.DeleteValue(rebootValue)
+	}
+
 	return t, nil
 }
 
@@ -164,16 +178,15 @@ func SystemReboot(t time.Time) error {
 
 	notification.RebootPopup(30).Push()
 
-	time.Sleep(sleepWaitTime)
-
-	if err := ClearRebootTime(); err != nil {
+	if err := ClearRebootTime(); err != nil && err != registry.ErrNotExist {
 		return fmt.Errorf("failed to clean up registry value %q: %v", rebootValue, err)
 	}
-	if err := cleanRebootUpdatesValue(); err != nil {
-		if err != registry.ErrNotExist {
-			return fmt.Errorf("failed to clear updates requiring reboot from registry: %v", err)
-		}
+	if err := cleanRebootUpdatesValue(); err != nil && err != registry.ErrNotExist {
+		return fmt.Errorf("failed to clear updates requiring reboot from registry: %v", err)
 	}
+
+	time.Sleep(sleepWaitTime)
+
 	return power.Reboot(power.SHTDN_REASON_MAJOR_SOFTWARE, true)
 }
 
@@ -203,8 +216,8 @@ func NewCOMObject(id string) (*ole.IDispatch, error) {
 	return obj, nil
 }
 
-// RebootRequired indicates whether a system restart is required.
-func RebootRequired() (bool, error) {
+// rebootRequiredImpl indicates whether a system restart is required.
+func rebootRequiredImpl() (bool, error) {
 	sysinfo, err := NewCOMObject("Microsoft.Update.SystemInfo")
 	if err != nil {
 		return false, err

@@ -20,6 +20,7 @@ package main
 
 import (
 	"golang.org/x/net/context"
+	"errors"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
@@ -306,6 +307,11 @@ func setRebootMetric() {
 
 	if rbr {
 		rebootEvent <- rbr
+	}
+	if !rbr {
+		if err := cablib.ClearRebootTime(); err != nil && !errors.Is(err, registry.ErrNotExist) {
+			deck.ErrorfA("Error clearing stale reboot time: %v", err).With(eventID(cablib.EvtErrPowerMgmt)).Go()
+		}
 	}
 }
 
