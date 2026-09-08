@@ -145,18 +145,26 @@ Uninstall Cabbie service:
 
 ### Wsus
 
-Initializes the wsus server configuration and restarts the windows update
-service. If `--wsus_servers` flag is provided, Cabbie will check for
+Initializes the WSUS server configuration and restarts the Windows Update
+service. If the `--wsus_servers` flag is provided, Cabbie checks for
 connectivity to Windows Update endpoints. If it fails to connect, or if
-`--force` is true, it will write the provided list of servers to the
-`WsusServers` value in `HKLM:\SOFTWARE\Google\Cabbie` before initializing WSUS
-configuration and restarting the Windows Update service.
+`--force` is true, it writes the provided list of servers to the
+`WSUSServers` value in `HKLM:\SOFTWARE\Google\Cabbie`.
+
+By default, Cabbie pings the WSUS servers to find the fastest one. If `--force`
+is true, it skips this verification and unconditionally sets the first server.
+If no WSUS servers are reachable and `--force` is not active, it reverts to
+Windows Update and displays a warning.
+
+If no servers are provided and none are configured in the registry, a helpful
+message is displayed and the command will fail.
 
 `cabbie wsus [--wsus_servers=<server1>,<server2>] [--force]`
 
 Example:
 
-`cabbie wsus --wsus_servers=server1.google.com,server2.google.com`
+`"C:\Program Files\Google\Cabbie\cabbie.exe" wsus
+--wsus_servers="wsus1.example.com,wsus2.example.com"`
 
 `cabbie wsus`
 

@@ -99,11 +99,35 @@ func (c *wsusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		}
 	}
 
-	if _, err := wsus.Init(config.WSUSServers); err != nil {
+	if len(config.WSUSServers) == 0 {
+		fmt.Println("No WSUS servers configured. Please provide servers using the --wsus_servers flag.")
+		return subcommands.ExitFailure
+	}
+
+	var w *wsus.WSUS
+	var err error
+
+	if c.force {
+		deck.Info("Forcing WSUS configuration, skipping verification.")
+		w = &wsus.WSUS{Servers: config.WSUSServers}
+		err = w.Set(0)
+		if err == nil {
+			w.ServerSelection = wsus.ManagedServer
+		}
+	} else {
+		w, err = wsus.Init(config.WSUSServers)
+	}
+
+	if err != nil {
 		msg := fmt.Sprintf("Failed to initialize WSUS: %v\n", err)
 		deck.ErrorfA("%s", msg).With(eventID(cablib.EvtErrMisc)).Go()
 		fmt.Print(msg)
 		return subcommands.ExitFailure
+	}
+
+	if w.ServerSelection == wsus.WindowsUpdate && !c.force {
+		deck.Warning("No WSUS servers were reachable. Reverted to Windows Update.")
+		fmt.Println("Warning: No WSUS servers were reachable. Reverted to Windows Update.")
 	}
 
 	deck.InfoA("WSUS configuration refreshed, restarting wuauserv to apply settings.").With(eventID(cablib.EvtMisc)).Go()

@@ -59,3 +59,10 @@ func TestSet(t *testing.T) {
 		}
 	}
 }
+
+func TestInit_EmptyServers(t *testing.T) {
+	_, err := Init([]string{})
+	if err == nil {
+		t.Error("Init([]) expected error for empty servers list, got nil")
+	}
+}
