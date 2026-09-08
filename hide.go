@@ -21,10 +21,12 @@ import (
 
 	"flag"
 	"github.com/google/cabbie/cablib"
+	"github.com/google/cabbie/enforcement"
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatecollection"
 	"github.com/google/deck"
+	"golang.org/x/exp/slices"
 	"github.com/google/subcommands"
 )
 
@@ -126,6 +128,37 @@ func hide(kbs KBSet) error {
 		}
 	}
 
+	return nil
+}
+
+func unHideUpdates(upd enforcement.Enforcements) error {
+	// Find hidden updates.
+	uc, err := findUpdates("IsHidden=1")
+	if err != nil {
+		return err
+	}
+	defer uc.Close()
+	deck.InfofA("Found %d hidden updates.", len(uc.Updates)).With(eventID(cablib.EvtUnhide)).Go()
+	// Check if currently hidden updates are still in the list of hidden updates.
+	// If they are, continue. If they are not still in the list, unhide them.
+	for _, u := range uc.Updates {
+		var skip bool
+		if slices.Contains(upd.HiddenUpdateID, u.Identity.UpdateID) {
+			continue
+		}
+		for _, kb := range u.KBArticleIDs {
+			if slices.Contains(upd.Hidden, kb) {
+				skip = true
+			}
+		}
+		if skip {
+			continue
+		}
+		deck.InfofA("Unhiding update:\n%s", u.Title).With(eventID(cablib.EvtUnhide)).Go()
+		if err := u.UnHide(); err != nil {
+			deck.ErrorfA("Failed to unhide update %s:\n %s", u.Title, err).With(eventID(cablib.EvtErrUnhide)).Go()
+		}
+	}
 	return nil
 }
 
