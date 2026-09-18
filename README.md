@@ -187,12 +187,21 @@ ProgramData directory (C:\ProgramData\Cabbie).
 
 Required updates can be designated as a list of zero or more KB article strings
 under the `required` key. To hide an update from cabbie, place the KB article
-string under the `hidden` key or use the Update ID under the `hidden-UpdateID`
-key.
+string under the `hidden` key or use the client-side Windows Update Agent (WUA)
+`UpdateID` GUID under the `hidden-UpdateID` key.
+
+> **Note:** The `UpdateID` used in `hidden-UpdateID` must be the client-side WUA
+> `IUpdateIdentity.UpdateID` evaluated on the host (which can be found via
+> `cabbie list --ids`, `cabbie history`, or Windows Event ID 41 `updateGuid` in
+> `Microsoft-Windows-WindowsUpdateClient/Operational`). Do **not** use the
+> `updateid` GUID parameter from Microsoft Update Catalog URLs
+> (`catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=...`), as that
+> represents a server-side package container GUID that does not match the
+> client-side `UpdateID`.
 
 Example:
 
-```
+```json
 {
   "required": [
     "123456"
