@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/cabbie/cablib"
 
@@ -45,6 +46,9 @@ type Enforcements struct {
 	ExcludedDrivers []DriverExclude `json:"excluded-drivers"`
 	Hidden          []string        `json:"hidden"`
 	HiddenUpdateID  []string        `json:"hidden-UpdateID"`
+	Unhide []string `json:"unhide"`
+	UnhideUpdateID []string `json:"unhide-UpdateID"`
+	Conflicts []string `json:"-"`
 }
 
 // DriverExclude specifies criteria to exclude certain driver updates.
@@ -95,8 +99,11 @@ func Get() (Enforcements, error) {
 		ret.Hidden = append(ret.Hidden, e.Hidden...)
 		ret.ExcludedDrivers = append(ret.ExcludedDrivers, e.ExcludedDrivers...)
 		ret.HiddenUpdateID = append(ret.HiddenUpdateID, e.HiddenUpdateID...)
+		ret.Unhide = append(ret.Unhide, e.Unhide...)
+		ret.UnhideUpdateID = append(ret.UnhideUpdateID, e.UnhideUpdateID...)
 	}
 	ret.dedupe()
+	ret.reconcile()
 	return ret, nil
 }
 
@@ -131,7 +138,46 @@ func (e *Enforcements) dedupe() {
 	e.Required = uniqueStrings(e.Required)
 	e.Hidden = uniqueStrings(e.Hidden)
 	e.HiddenUpdateID = uniqueStrings(e.HiddenUpdateID)
+	e.Unhide = uniqueStrings(e.Unhide)
+	e.UnhideUpdateID = uniqueStrings(e.UnhideUpdateID)
 	e.ExcludedDrivers = uniqueDriverExclude(e.ExcludedDrivers)
+}
+
+func normalizeKB(kb string) string {
+	return strings.ReplaceAll(strings.ToLower(kb), "kb", "")
+}
+
+// reconcile resolves entries that are requested to be both hidden and
+// unhidden. If in both, hiding wins and we log it.
+func (e *Enforcements) reconcile() {
+	hidden := make(map[string]bool, len(e.Hidden))
+	for _, kb := range e.Hidden {
+		hidden[normalizeKB(kb)] = true
+	}
+	hiddenID := make(map[string]bool, len(e.HiddenUpdateID))
+	for _, id := range e.HiddenUpdateID {
+		hiddenID[strings.ToLower(id)] = true
+	}
+
+	unhide := make([]string, 0, len(e.Unhide))
+	for _, kb := range e.Unhide {
+		if hidden[normalizeKB(kb)] {
+			e.Conflicts = append(e.Conflicts, kb)
+			continue
+		}
+		unhide = append(unhide, kb)
+	}
+	e.Unhide = unhide
+
+	unhideID := make([]string, 0, len(e.UnhideUpdateID))
+	for _, id := range e.UnhideUpdateID {
+		if hiddenID[strings.ToLower(id)] {
+			e.Conflicts = append(e.Conflicts, id)
+			continue
+		}
+		unhideID = append(unhideID, id)
+	}
+	e.UnhideUpdateID = unhideID
 }
 
 // Watcher runs a filesystem watcher for required updates. This is meant to install required updates as soon as they are configured.
