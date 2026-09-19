@@ -54,6 +54,16 @@ func TestDedupe(t *testing.T) {
 			Enforcements{Hidden: []string{"4018073", "67891011"}},
 		},
 		{
+			"with dup unhide",
+			Enforcements{Unhide: []string{"4018073", "67891011", "4018073", "4018073"}},
+			Enforcements{Unhide: []string{"4018073", "67891011"}},
+		},
+		{
+			"with dup unhide update ids",
+			Enforcements{UnhideUpdateID: []string{"8870bdb3", "245bd515", "8870bdb3"}},
+			Enforcements{UnhideUpdateID: []string{"8870bdb3", "245bd515"}},
+		},
+		{
 			"with dup excluded drivers",
 			Enforcements{ExcludedDrivers: []DriverExclude{
 				{DriverClass: "Dupe"},
@@ -82,6 +92,83 @@ func TestDedupe(t *testing.T) {
 	}
 }
 
+func TestReconcile(t *testing.T) {
+	tests := []struct {
+		desc string
+		in   Enforcements
+		want Enforcements
+	}{
+		{
+			"no conflicts",
+			Enforcements{
+				Hidden:         []string{"4018073"},
+				HiddenUpdateID: []string{"8870bdb3-95f9-43d9-9ba4-1f0e7cf13db2"},
+				Unhide:         []string{"67891011"},
+				UnhideUpdateID: []string{"245bd515-7b95-496e-acac-344881833263"},
+			},
+			Enforcements{
+				Hidden:         []string{"4018073"},
+				HiddenUpdateID: []string{"8870bdb3-95f9-43d9-9ba4-1f0e7cf13db2"},
+				Unhide:         []string{"67891011"},
+				UnhideUpdateID: []string{"245bd515-7b95-496e-acac-344881833263"},
+			},
+		},
+		{
+			"hidden wins over unhide",
+			Enforcements{
+				Hidden: []string{"4018073"},
+				Unhide: []string{"4018073", "67891011"},
+			},
+			Enforcements{
+				Hidden:    []string{"4018073"},
+				Unhide:    []string{"67891011"},
+				Conflicts: []string{"4018073"},
+			},
+		},
+		{
+			"kb prefix is normalized",
+			Enforcements{
+				Hidden: []string{"KB4018073"},
+				Unhide: []string{"4018073"},
+			},
+			Enforcements{
+				Hidden:    []string{"KB4018073"},
+				Conflicts: []string{"4018073"},
+			},
+		},
+		{
+			"hidden wins over unhide update id",
+			Enforcements{
+				HiddenUpdateID: []string{"8870BDB3-95F9-43D9-9BA4-1F0E7CF13DB2"},
+				UnhideUpdateID: []string{"8870bdb3-95f9-43d9-9ba4-1f0e7cf13db2"},
+			},
+			Enforcements{
+				HiddenUpdateID: []string{"8870BDB3-95F9-43D9-9BA4-1F0E7CF13DB2"},
+				Conflicts:      []string{"8870bdb3-95f9-43d9-9ba4-1f0e7cf13db2"},
+			},
+		},
+		{
+			"unhide by update id is unaffected by a hidden kb",
+			Enforcements{
+				Hidden:         []string{"4018073"},
+				UnhideUpdateID: []string{"8870bdb3-95f9-43d9-9ba4-1f0e7cf13db2"},
+			},
+			Enforcements{
+				Hidden:         []string{"4018073"},
+				UnhideUpdateID: []string{"8870bdb3-95f9-43d9-9ba4-1f0e7cf13db2"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			tt.in.reconcile()
+			if diff := cmp.Diff(tt.want, tt.in, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("reconcile(%s) returned unexpected diff (-want +got):\n%s", tt.desc, diff)
+			}
+		})
+	}
+}
+
 func TestEnforcements(t *testing.T) {
 	tests := []struct {
 		in      string
@@ -94,6 +181,13 @@ func TestEnforcements(t *testing.T) {
 		},
 		{"hidden.json",
 			Enforcements{Hidden: []string{"4018073", "67891011"}},
+			nil,
+		},
+		{"unhide.json",
+			Enforcements{
+				Unhide:         []string{"4018073", "67891011"},
+				UnhideUpdateID: []string{"8870bdb3-95f9-43d9-9ba4-1f0e7cf13db2", "245bd515-7b95-496e-acac-344881833263"},
+			},
 			nil,
 		},
 		{"excluded-drivers.json",
