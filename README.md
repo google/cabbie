@@ -105,15 +105,22 @@ Retrieves the recorded history of installed updates.
 
 ### Hide
 
-Hides or unhides an update from installation.
+Hides or unhides an update from installation. Updates can be selected by KB
+article ID (`--kbs`), by Update ID (`--update-ids`), or both.
 
 Hide a KB:
 
 `cabbie hide --kbs="1234513"`
 
+Hide an update by its Update ID:
+
+`cabbie hide --update-ids="1234ccd5-1234-456f-78gh-ij2911553881"`
+
 Make an update available for install:
 
 `cabbie hide --unhide --kbs="1234513"`
+
+`cabbie hide --unhide --update-ids="1234ccd5-1234-456f-78gh-ij2911553881"`
 
 ### Reboot
 
@@ -199,6 +206,17 @@ string under the `hidden` key or use the client-side Windows Update Agent (WUA)
 > represents a server-side package container GUID that does not match the
 > client-side `UpdateID`.
 
+Removing an update from the `hidden` or `hidden-UpdateID` keys does not make it
+visible again, because Cabbie has no record of why an update was hidden and will
+not undo hides performed by an administrator or another tool. To make a
+previously hidden update visible again, place the KB article string under the
+`unhide` key or the Update ID under the `unhide-UpdateID` key. Unhidden updates
+become eligible for installation during the next update cycle.
+
+Enforcements are aggregated across every json file in the enforcement directory.
+If the same update is listed as both hidden and unhidden, hiding wins and the
+conflict is logged.
+
 Example:
 
 ```json
@@ -211,6 +229,12 @@ Example:
   ],
   "hidden-UpdateID": [
     "1234ccd5-1234-456f-78gh-ij2911553881"
+  ],
+  "unhide": [
+    "789012"
+  ],
+  "unhide-UpdateID": [
+    "5678ccd5-1234-456f-78gh-ij2911553882"
   ]
 }
 ```
