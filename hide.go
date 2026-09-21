@@ -25,16 +25,36 @@ import (
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
 	"github.com/google/cabbie/updatecollection"
+	"github.com/google/cabbie/updates"
 	"github.com/google/deck"
 	"github.com/google/subcommands"
 	"github.com/google/glazier/go/helpers"
 )
+
+const (
+	// skipUnrelated indicates the update was not requested to be unhidden.
+	skipUnrelated unhideAction = iota
+	// skipConflict indicates the update was requested to be unhidden but is also
+	// explicitly hidden, so it is left hidden.
+	skipConflict
+	// applyUnhide indicates the update should be made visible.
+	applyUnhide
+)
+
+// unhideAction describes what unhide does with a single candidate update.
+type unhideAction int
 
 // Available flags
 type hideCmd struct {
 	kbs       string
 	updateIDs string
 	unhide    bool
+}
+
+// updateSet is a group of updates by KB, updateID, or both.
+type updateSet struct {
+	kbs   KBSet
+	uuids []string
 }
 
 func (hideCmd) Name() string     { return "hide" }
@@ -59,7 +79,7 @@ func (c hideCmd) Execute(_ context.Context, flags *flag.FlagSet, _ ...any) subco
 	}
 
 	if c.unhide {
-		if err := unhide(kbs, updateIDs); err != nil {
+		if err := unhide(updateSet{kbs: kbs, uuids: updateIDs}, updateSet{}); err != nil {
 			fmt.Println(err)
 			deck.ErrorfA("Error unhiding an update: %v", err).With(eventID(cablib.EvtErrUnhide)).Go()
 		}
@@ -97,10 +117,46 @@ func findUpdates(criteria string) (*updatecollection.Collection, error) {
 	return q.QueryUpdates()
 }
 
+// empty reports whether the set identifies no updates at all.
+func (s updateSet) empty() bool {
+	return s.kbs.Size() < 1 && len(s.uuids) < 1
+}
+
+// matches reports whether u is identified by this set, by either identifier.
+func (s updateSet) matches(u *updates.Update) bool {
+	return s.kbs.Search(u.KBArticleIDs) || matchUpdateID(s.uuids, u.Identity.UpdateID)
+}
+
+func (a unhideAction) String() string {
+	switch a {
+	case skipUnrelated:
+		return "skipUnrelated"
+	case skipConflict:
+		return "skipConflict"
+	case applyUnhide:
+		return "applyUnhide"
+	}
+	return fmt.Sprintf("unhideAction(%d)", int(a))
+}
+
+// decideUnhide reports what should happen to u given the set of updates
+// requested to be unhidden and the set of updates that are explicitly hidden.
+// Hiding wins if both are specified.
+func decideUnhide(want, hidden updateSet, u *updates.Update) unhideAction {
+	switch {
+	case !want.matches(u):
+		return skipUnrelated
+	case hidden.matches(u):
+		return skipConflict
+	default:
+		return applyUnhide
+	}
+}
+
 // unhide makes hidden updates visible again. An update is unhidden if it
 // matches any of the passed KB article IDs or any of the passed update IDs.
-func unhide(kbs KBSet, uuids []string) error {
-	if kbs.Size() < 1 && len(uuids) < 1 {
+func unhide(want, hidden updateSet) error {
+	if want.empty() {
 		return nil
 	}
 
@@ -114,7 +170,12 @@ func unhide(kbs KBSet, uuids []string) error {
 	deck.InfofA("Found %d matching updates.", len(uc.Updates)).With(eventID(cablib.EvtUnhide)).Go()
 
 	for _, u := range uc.Updates {
-		if !kbs.Search(u.KBArticleIDs) && !matchUpdateID(uuids, u.Identity.UpdateID) {
+		switch decideUnhide(want, hidden, u) {
+		case skipUnrelated:
+			continue
+		case skipConflict:
+			deck.ErrorfA("Ignoring unhide for update %q (UpdateID: %s, KBs: %v) because it is also explicitly hidden.",
+				u.Title, u.Identity.UpdateID, u.KBArticleIDs).With(eventID(cablib.EvtErrEnforcement)).Go()
 			continue
 		}
 		deck.InfofA("Unhiding update:\n%s", u.Title).With(eventID(cablib.EvtUnhide)).Go()

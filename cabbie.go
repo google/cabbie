@@ -336,7 +336,9 @@ func enforce() error {
 		deck.ErrorfA("Ignoring unhide enforcement for updates that are also explicitly hidden: %v", updates.Conflicts).With(eventID(cablib.EvtErrEnforcement)).Go()
 	}
 	if len(updates.Unhide) > 0 || len(updates.UnhideUpdateID) > 0 {
-		if err := unhide(NewKBSetFromSlice(updates.Unhide), updates.UnhideUpdateID); err != nil {
+		want := updateSet{kbs: NewKBSetFromSlice(updates.Unhide), uuids: updates.UnhideUpdateID}
+		hidden := updateSet{kbs: NewKBSetFromSlice(updates.Hidden), uuids: updates.HiddenUpdateID}
+		if err := unhide(want, hidden); err != nil {
 			failures = fmt.Errorf("error unhiding updates: %v", err)
 			deck.ErrorA(failures).With(eventID(cablib.EvtErrUnhide)).Go()
 		}

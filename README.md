@@ -215,7 +215,8 @@ become eligible for installation during the next update cycle.
 
 Enforcements are aggregated across every json file in the enforcement directory.
 If the same update is listed as both hidden and unhidden, hiding wins and the
-conflict is logged.
+conflict is logged. This holds even when the two entries use different
+identifiers, such as hiding an update by KB ID and unhiding it by Update ID.
 
 Example:
 
