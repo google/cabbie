@@ -1,6 +1,7 @@
 # Cabbie
 
-[![Go Tests](https://github.com/google/cabbie/workflows/Go%20Tests/badge.svg)](https://github.com/google/cabbie/actions?query=workflow%3A%22Go+Tests%22) [![release](https://github.com/google/fresnel/actions/workflows/release.yml/badge.svg)](https://github.com/google/fresnel/actions/workflows/release.yml)
+[![Go Tests](https://github.com/google/cabbie/workflows/Go%20Tests/badge.svg)](https://github.com/google/cabbie/actions?query=workflow%3A%22Go+Tests%22)
+[![release](https://github.com/google/cabbie/actions/workflows/release.yml/badge.svg)](https://github.com/google/cabbie/actions/workflows/release.yml)
 
 ## Overview
 
